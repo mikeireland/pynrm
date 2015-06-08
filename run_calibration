@@ -1,0 +1,23 @@
+#!/usr/bin/env python
+"""
+A script that takes a set of directories and file numbers and makes python calibrations.
+
+Note that flats are not always made... extra logical links could be useful.
+"""
+
+import sys
+import numpy as np
+# This includes an AO Instrument called "aoinst"
+import pypoise
+import nirc2
+import pdb
+
+#Create a pypoise instance with a nirc2 AO instrument
+pp = pypoise.PYPOISE(nirc2.NIRC2())
+
+pp.aoinst.rdir = sys.argv[1] #'/Users/mireland/tel/nirc2/redux/130717/'
+pp.aoinst.ddir = sys.argv[2] #'/Users/mireland/data/nirc2/130717/n'
+
+pp.aoinst.read_summary_csv()
+pp.aoinst.make_all_darks()
+pp.aoinst.make_all_flats()

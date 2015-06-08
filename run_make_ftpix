@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+"""
+A script that takes a set of directories and file numbers and cleans data appropriately
+"""
+
+import sys
+import numpy as np
+# This includes an AO Instrument called "aoinst"
+import pypoise
+import nirc2
+import pdb
+
+#Create a pypoise instance with a nirc2 AO instrument
+pp = pypoise.PYPOISE(nirc2.NIRC2())
+
+if sys.argv[1] == 'd':
+    do_we_dither = True
+else:
+    do_we_dither = False
+
+pp.aoinst.rdir = sys.argv[2] #'/Users/mireland/tel/nirc2/redux/130717/'
+pp.aoinst.ddir = sys.argv[3] #'/Users/mireland/data/nirc2/130717/n'
+pp.aoinst.cdir = sys.argv[4] #'./'
+
+extn = '.fits.gz'
+
+files = [(pp.aoinst.ddir + '{0:04d}' + extn).format(i + int(sys.argv[5])) for i range(int(sys.argv[6]))]
+(ftpix, fmask, ptok) = pupil_sampling(files,dither=do_we_dither)

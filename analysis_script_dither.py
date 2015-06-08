@@ -18,36 +18,32 @@ import nirc2
 pp = pypoise.PYPOISE(nirc2.NIRC2())
 plt.ion()
 
-#Reduction Directory
-pp.aoinst.rdir = '/Users/mireland/tel/nirc2/redux/130717/'
-pp.aoinst.cdir = '/Users/mireland/tel/nirc2/redux/130717/'
+#Reduction Directory - Lp full pupil
+pp.aoinst.rdir = '/Users/mireland/tel/nirc2/redux/140610/'
+pp.aoinst.cdir = '/Users/mireland/tel/nirc2/redux/140610/'
 #Data directory
-pp.aoinst.ddir =  '/Users/mireland/data/nirc2/130717/'
+pp.aoinst.ddir =  '/Users/mireland/data/nirc2/140610/'
+
+
 extn = '.fits.gz'
 pp.aoinst.read_summary_csv()
 
 if(False):
  pp.aoinst.make_all_darks()
- files = [(pp.aoinst.ddir + 'n{0:04d}' + extn).format(i) for i in range(26,41)]
- pp.aoinst.make_flat(files)
+
+if(False):
+ files = [(pp.aoinst.ddir + 'n{0:04d}' + extn).format(i) for i in range(33,87)]
+ pp.aoinst.make_flat(files, dark_file='dark_1024_10_1_18.fits')
     
 if(False):
- #files = [(ddir + 'n{0:04d}' + extn).format(i) for i in range(378,389)]
- #aoinst.make_dark(files,rdir + 'dark_512_4_16_5.fits')  
-
- #Make a dark for the flat
- #files = [(ddir + 'n{0:04d}' + extn).format(i) for i in range(21,26)]
- #aoinst.make_dark(files,rdir + 'dark_1024_1_64_45.fits')
-
  #Create the Fourier sampling and ptok matrix. This needs a moderately high S/N
  #data set to tweak the Fourier sampling.
- files = [('n{0:04d}' + extn).format(i) for i in range(372,378)]
+ files = [('n{0:04d}' + extn).format(i) for i in range(558,566)]
  pp.pupil_sampling(files)
 
-if(True): 
+if(False): 
  #Cube/clean the files. Lets start with doing this manually over a limited elevation range
- fnums = (range(93,99),range(102,108),range(112,118),range(121,127),range(130,136),\
-    range(142,148),range(151,157),range(160,166),range(169,175),range(178,184))
+ fnums = (range(541+8,557),range(558,566),range(567,575),range(576,582),range(582,588))
  cube_files = []
  kp_files = []
  kp_mn_files = []
@@ -64,47 +60,53 @@ if(True):
   
   cube_files.append(cube_file)
   kp_files.append(kp_file)
-  cube = pp.aoinst.clean_no_dither(files, out_file=cube_file)
+  cube = pp.aoinst.clean_dithered(files, out_file=cube_file)#, manual_click=True)
   d = pyfits.getdata(pp.aoinst.cdir + cube_file,1)
   all_maxs.append(d['max'])
   mn_maxs.append(all_maxs[j].mean)
   pp.extract_kerphase(cube_file=cube_file, add_noise=50,out_file=kp_file, summary_file=kp_mn_file)
   d=pyfits.getdata(kp_mn_file)
   mn_kps.append(d['kp_mn'])
-
-if(0):
- #Go through the files and find the ones that look best for poise...
- mn_kps = np.array(mn_kps)
  kp_files = np.array(kp_files)
- med_cal_kps = []
- med_kp = np.median(mn_kps, axis=0)
- for j in range(len(fnums)):
-  cal_kp = mn_kps[j,:] - med_kp
-  med_cal_kps.append(np.abs(np.median(cal_kp)))
- # Find the good calibrators from the cals with the lowest scatter.
- good_cals = np.where(med_cal_kps < 1.5*np.median(med_cal_kps))[0]
- poise_kerphase(kp_files[good_cals], out_file=rdir + 'poise.fits')
+
+if(True):
+ #Go through the files and find the ones that look best for poise...
+#  cals = [0,2,4]
+#  mn_kps = np.array(mn_kps)
+#  kp_files = np.array(kp_files)
+#  med_cal_kps = []
+#  med_kp = np.median(mn_kps[, axis=0)
+#  for j in range(len(fnums)):
+#   cal_kp = mn_kps[j,:] - med_kp
+#   med_cal_kps.append(np.abs(np.median(cal_kp)))
+#  # Find the good calibrators from the cals with the lowest scatter.
+#  good_cals = np.where(med_cal_kps < 1.5*np.median(med_cal_kps))[0]
+ good_cals = [0,2,4]
+ pp.poise_kerphase(kp_files[good_cals], out_file=pp.aoinst.cdir + 'poise.fits')
     
-if (0):
- targname = 'KOI2704'
- summary_file = rdir + targname + '_kp_poise.fits'
- implane_file = rdir + targname + '_implane.fits'
- pxscale = 5.0
+if (True):
+ targname = 'HD169142'
+ summary_file1 = pp.aoinst.cdir + targname + '_0558_kp_poise.fits'
+ summary_file2 = pp.aoinst.cdir + targname + '_0576_kp_poise.fits'
+ implane_file = pp.aoinst.cdir + targname + '_implane.fits'
  #Readout noise on the following line is slightly higher because of the weird systematics associated with 
  #phase wrapping.
- extract_kerphase(ptok_file=rdir + 'poise.fits',cube_file=rdir + 'cube142.fits',\
-    use_poise=True,summary_file=summary_file,add_noise=16,rnoise=3.0) 
+ pp.extract_kerphase(ptok_file='poise.fits',cube_file='cube0558.fits',\
+    use_poise=True,summary_file=summary_file1,add_noise=16) 
+ pp.extract_kerphase(ptok_file='poise.fits',cube_file='cube0576.fits',\
+    use_poise=True,summary_file=summary_file2,add_noise=16) 
  #Automatic from here...
- kp_implane = kp_to_implane(summary_files=[summary_file], out_file=implane_file, sz=200, pxscale=pxscale)
+ pxscale = 5.0
+ kp_implane = pp.kp_to_implane(summary_files=[summary_file1,summary_file2], out_file=implane_file, sz=100, pxscale=pxscale)
 
-if (0):
- pgrid, crat, crat_sig, chi2, best_rchi2 = implane_fit_binary(implane_file, summary_file=summary_file, to_sky_pa=False)
+if (True):
+ pgrid, crat, crat_sig, chi2, best_rchi2 = pp.implane_fit_binary(implane_file)
  print "Grid Fit: ", pgrid
  pgrid = np.array(pgrid)
  if (pgrid[2] > 0.5):
     print "Contrast too high to use kerphase for fitting (i.e. near-equal binary)."
  else:
-    p = kp_binary_fit([summary_file],pgrid)
+    p = pp.kp_binary_fit([summary_file1, summary_file2],pgrid)
  a = azimuthalAverage(crat_sig, returnradii=True,binsize=1)
  sep_null = a[0]*pxscale
  contrast_null = -2.5*np.log10(5*a[1])

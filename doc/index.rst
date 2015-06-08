@@ -6,11 +6,11 @@
 Welcome to pynrm's documentation!
 =================================
 
-Contents:
-
 .. toctree::
    :maxdepth: 2
 
    intro
    pypoise
+   aoinstrument
+   nirc2
 
