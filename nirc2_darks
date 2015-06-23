@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+""" This creates a file called 'darks' which should be:
+1) Copied to waikoko, e.g. "scp darks nirc15@waikoko:/home/nirc2eng/vis/ireland/darks.150623"
+2) Run, e.g. "sh  /home/nirc2eng/vis/ireland/darks.150623" """
+from __future__ import print_function
+import numpy as np
+import nirc2
+import sys
+
+n2 = nirc2.NIRC2()
+if len(sys.argv) > 1:
+    n2.ddir = sys.argv[1]
+else:
+    n2.ddir = './'
+#n2.ddir = '/Users/mireland/data/nirc2/2015jun22/'   
+    
+n2.read_summary_csv()
+
+f = open(n2.ddir + "darks","w")
+
+#Forget darks for flats - these should be done separately!
+stars = np.where(np.abs(n2.csv_dict['EL'].astype(float) - 45) > 0.1)[0]
+
+codes = []
+for d in stars:
+    codes.append(n2.csv_dict['NAXIS1'][d] + n2.csv_dict['NAXIS2'][d] + 
+            n2.csv_dict['ITIME'][d] + n2.csv_dict['COADDS'][d] + n2.csv_dict['MULTISAM'][d])
+codes = np.array(codes)
+
+#import pdb; pdb.set_trace()
+
+f.write("shutter close\n")
+f.write("wait4ao off\n")
+f.write("filt jcont\n")
+f.write("object darks\n")
+for c in np.unique(codes):
+    w = stars[np.where(codes == c)[0]]
+    if (len(w) >= 3):
+        w = w[0]
+        f.write("subc {0:s}\n".format(n2.csv_dict['NAXIS1'][w]))
+        if (n2.csv_dict['MULTISAM'][w] == '1'):
+            f.write("sampmode 2\n")
+        else:
+            f.write("sampmode 3 {0:s}\n".format(n2.csv_dict['MULTISAM'][w]))
+        f.write("tint {0:s}\n".format(n2.csv_dict['ITIME'][w]))
+        f.write("coadd {0:s}\n".format(n2.csv_dict['COADDS'][w]))
+        f.write("goi 15\n\n")
+
+f.close
