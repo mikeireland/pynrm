@@ -6,6 +6,8 @@ import scipy.ndimage as nd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import time
+import glob
+import pdb
 
 from aoinstrument import AOInstrument 
 
@@ -41,10 +43,62 @@ class NIRC2(AOInstrument):
         if (len(w) >= 3):
             files = [ddir + self.csv_dict['FILENAME'][darks[ww]] for ww in w]
             self.make_dark(files, rdir=rdir)
-
+            
+ def make_all_flats(self, ddir='', rdir=''):
+    """Search for sets of files that look like they are a series of flats. If "Lamp Off" 
+    files exist within 100 files or so of the flats, call them the darks to go with the
+    flats. """
+    #Allow over-riding default reduction and data directories.
+    if (rdir == ''):
+        rdir = self.rdir
+    if (ddir == ''):
+        ddir = self.ddir
+    if len(self.csv_dict) == 0:
+        print("Error: Run read_summary_csv first. No darks made.")
+        return
+    #If we're in the dome flat position with more than 1000 counts, this looks
+    #like it could be a dome flat!
+    flats_maybe = np.where( (self.csv_dict['MEDIAN_VALUE'].astype('float') > 1000) & 
+                            (np.abs(self.csv_dict['EL'].astype('float') - 45) < 0.01) )[0]
+    codes = []
+    fluxes = self.csv_dict['MEDIAN_VALUE'][flats_maybe].astype(float)
+    for ix in range(len(self.csv_dict['EL'])):
+        codes.append(self.csv_dict['FILTER'][ix] + self.csv_dict['NAXIS1'][ix] + self.csv_dict['NAXIS2'][ix] + 
+            self.csv_dict['ITIME'][ix] + self.csv_dict['COADDS'][ix] + self.csv_dict['MULTISAM'][ix] + 
+            self.csv_dict['SLITNAME'][ix])
+    codes = np.array(codes)
+    flat_codes = codes[flats_maybe]
+    #For each unique code, find the files with consistent flux
+    for c in np.unique(flat_codes):
+        #w indexes flats_maybe
+        w = np.where(flat_codes == c)[0]
+        #Flux has to be within 10% of the median to count.
+        this_flat_flux = np.median(fluxes[w])
+        good_flats = flats_maybe[w[np.where(np.abs( (fluxes[w] - this_flat_flux)/this_flat_flux < 0.1))[0]]]
+        #Less than 5 flats... don't bother.
+        if (len(good_flats) >= 5):
+            ffiles = [ddir + self.csv_dict['FILENAME'][ww] for ww in good_flats]
+            #Now look for lamp off files.
+            lamp_off = np.where( (codes == c) & (np.array(self.csv_dict['MEDIAN_VALUE'].astype(float) < 600) & \
+                    (np.abs(self.csv_dict['EL'].astype(float) - 45) < 0.01) ) )[0]
+            if (len(lamp_off) >= 3):
+                #Use these lamp_off indexes to create a "special" dark.
+                dfiles = [ddir + self.csv_dict['FILENAME'][ww] for ww in lamp_off]
+                try:
+                    hh = pyfits.open(dfiles[0], ignore_missing_end=True)[0].header
+                except:
+                    hh = pyfits.open(dfiles[0]+'.gz', ignore_missing_end=True)[0].header
+                dfilename = str(lamp_off[0]) + '_' + self.get_dark_filename(hh)
+                self.make_dark(dfiles, out_file=dfilename)
+                self.make_flat(ffiles, dark_file=dfilename)
+            #Otherwise, just use default darks. This *will* give an error if they don't exist.
+            else:
+                self.make_flat(ffiles)
+                
  def csv_block_string(self, ix):
     """Find a string from the summary csv file that identifies a unique configuration
-    for a set of files to be processed as a block."""
+    for a set of files to be processed as a block. It isn't *quite* correct 
+    because the target name sometimes stays the same with a target change. """
     if len(self.csv_dict) == 0:
         print("Error: Run read_summary_csv first. No string returned.")
         return
@@ -83,6 +137,10 @@ class NIRC2(AOInstrument):
     except:
         print "No FWINAME in NIRC2 header"
         raise UserWarning
+    try: slit = h['SLITNAME']
+    except:
+        print "No SLITNAME in NIRC2 header"
+        raise UserWarning
 
     if (fwi=='Kp'):
         wave = 2.12e-6
@@ -105,10 +163,28 @@ class NIRC2(AOInstrument):
     elif (fwi=='Ms'):
         wave = 4.67e-6
         filter = 'Ms'
+    elif (fwi=='CH4_long'):
+        wave   = 1.68e-6
+        filter = 'CH4_long'
+    elif (fwi=='J'):
+        wave = 1.248e-6
+        filter = 'J'
+    elif (fwi=='z'):
+        wave   = 1.03e-6
+        filter = 'z'
+    elif (fwi=='Y'):
+        wave = 1.018e-6
+        filter = 'Y'
+    elif (fwi=='H'):
+        wave=1.633e-6
+        filter='H'
     else:
         print "Unknown Filter!"
-        raise UserWarning
-    flat_file = 'flat_' + filter + '.fits'
+        pdb.set_trace()
+    if (slit == 'none'):
+        flat_file = 'flat_' + filter + '.fits'
+    else:
+        flat_file = 'flat_' + filter + '_' + slit + '.fits'
 
     try: camname = h['CAMNAME']
     except:
@@ -129,7 +205,10 @@ class NIRC2(AOInstrument):
     rnoise = 50.0/gain/np.sqrt(multisam)*np.sqrt(h['COADDS'])
     #Find the appropriate dark file if needed.
     dark_file = self.get_dark_filename(h)
-    targname = h['TARGNAME']
+    if (h['OBSDNAME'] == 'sodiumDichroic'):
+        targname = h['OBJECT']
+    else:
+        targname = h['TARGNAME']
     #The pupil orientation...
     vertang_pa = h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
     pa = vertang_pa + h['PARANG']
@@ -280,7 +359,10 @@ class NIRC2(AOInstrument):
         print "At least 3 dark files sre needed for reliable statistics"
         raise UserWarning
     # Read in the first dark to check the dimensions.
-    in_fits = pyfits.open(in_files[0], ignore_missing_end=True)
+    try:
+        in_fits = pyfits.open(in_files[0], ignore_missing_end=True)
+    except:
+        in_fits = pyfits.open(in_files[0]+'.gz', ignore_missing_end=True)
     h = in_fits[0].header
     instname = ''
     try: instname=h['CURRINST']
@@ -362,7 +444,10 @@ class NIRC2(AOInstrument):
 
     coeff = np.array([1.001,-6.9e-6,-0.70e-10])
     #Get key parameters from the header and get the data
-    in_fits = pyfits.open(in_file, ignore_missing_end=True)
+    try:
+        in_fits = pyfits.open(in_file, ignore_missing_end=True)
+    except:
+        in_fits = pyfits.open(in_file + '.gz', ignore_missing_end=True)
     z = in_fits[0].header
     fitsarr = in_fits[0].data
     in_fits.close()
@@ -384,11 +469,37 @@ class NIRC2(AOInstrument):
             hl.writeto(out_file,clobber=True)
     return fitsarr
     
- def _calibration_subarr(self, rdir, flat_file, dark_file, szx, szy):
+ def _calibration_subarr(self, rdir, flat_file, dark_file, szx, szy, wave=0):
     """A function designed to be used internally only, which chops out the central part
-    of calibration data for sub-arrays"""
+    of calibration data for sub-arrays. It also automatically finds the nearest wavelength
+    flat if an appropriate flat doesn't exist. """
     if len(flat_file) > 0:
-        flat = pyfits.getdata(rdir + flat_file,0)
+        try:
+            flat = pyfits.getdata(rdir + flat_file,0)
+        except:
+            if wave>0:
+                #Find the flat file with the nearest wavelengths. In this case, ignore
+                #corona flats.
+                flat_files = glob.glob(rdir + 'flat*corona*fits')
+                waves = []
+                for ffile in flat_files:
+                    if ffile.find("corona") > 0:
+                        waves.append(-1)
+                    else:
+                        try: 
+                            wave_file = pyfits.getheader(ffile)['WAVE']
+                            waves.append(waves)
+                        except:
+                            print("Missing header keyword WAVE!")
+                            pdb.set_trace()
+                waves = np.array(waves)
+                ix = np.argmin(np.abs(waves - wave))
+                new_flat_file = flat_file[ix][len(rdir):]
+                print("*** Flat file {0:s} not found! Using {1:s} intead. ***") 
+                flat = pyfits.getdata(rdir + flat_file,0)
+            else:
+                print("ERROR - no flat file!")
+                pdb.set_trace()
         flat = flat[flat.shape[0]/2 - szy/2:flat.shape[0]/2 + szy/2,flat.shape[1]/2 - szx/2:flat.shape[1]/2 + szx/2]
         bad = pyfits.getdata(rdir + flat_file,1)
         bad = bad[bad.shape[0]/2 - szy/2:bad.shape[0]/2 + szy/2,bad.shape[1]/2 - szx/2:bad.shape[1]/2 + szx/2]
@@ -396,17 +507,21 @@ class NIRC2(AOInstrument):
         flat = np.ones((szy,szx))
         bad = np.zeros((szy,szx))
     if len(dark_file) > 0:
-        dark = pyfits.getdata(rdir + dark_file,0)
-        if (szy != dark.shape[0]):
-            print("Warning - Dark is of the wrong shape!")
-            dark = dark[dark.shape[0]/2 - szy/2:dark.shape[0]/2 + szy/2, \
+        try:
+            dark = pyfits.getdata(rdir + dark_file,0)
+            if (szy != dark.shape[0]):
+                print("Warning - Dark is of the wrong shape!")
+                dark = dark[dark.shape[0]/2 - szy/2:dark.shape[0]/2 + szy/2, \
                        dark.shape[1]/2 - szx/2:dark.shape[1]/2 + szx/2]
+        except:
+            print("*** Warning - Dark file {0:s} not found! Using zeros for dark ***".format(dark_file))
+            dark = np.zeros((szy,szx))
     else:
         dark = np.zeros((szy,szx))
     return (flat,dark,bad)
         
  def clean_no_dither(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
-     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, ddir='', rdir='', cdir=''):
+     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, ddir='', rdir='', cdir='', manual_click=False):
     """Clean a series of fits files, including: applying the dark, flat, 
     removing bad pixels and cosmic rays. This can also be used for dithered data, 
     but it will not subtract the dithered positions. There reason for two separate
@@ -448,7 +563,10 @@ class NIRC2(AOInstrument):
     nf = len(in_files)
     cube = np.zeros((nf,subarr,subarr))
     #Decide on the image size from the first file. !!! are x and y around the right way?
-    in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+    try:
+        in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+    except:
+        in_fits = pyfits.open(ddir + in_files[0] + '.gz', ignore_missing_end=True)
     h = in_fits[0].header
     in_fits.close()
     szx = h['NAXIS1']
@@ -467,14 +585,13 @@ class NIRC2(AOInstrument):
         except:
             print("Error - couldn't find kp/Fourier mask file: " +fmask_file+ " in directory: " + rdir)
             raise UserWarning
-        h_fmask = pyfits.getheader(rdir + fmask_file)
-        if (len(dark_file) == 0):
-            dark_file = h_fmask['DARK']
-        if (len(flat_file) == 0):
-            flat_file = h_fmask['FLAT']
+    if (len(dark_file) == 0):
+        dark_file = hinfo['dark_file']
+    if (len(flat_file) == 0):
+        flat_file = hinfo['flat_file']
 
     #Chop out the appropriate part of the flat, dark, bad arrays
-    (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy)
+    (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy, wave=hinfo['wave'])
 
     #Go through the files, cleaning them one at a time
     xpeaks = np.zeros(nf)
@@ -482,9 +599,13 @@ class NIRC2(AOInstrument):
     maxs = np.zeros(nf)
     pas = np.zeros(nf)
     backgrounds = np.zeros(nf)
+    isgood = np.array([], dtype=bool)
     for i in range(nf):
         #First, find the position angles from the header keywords. NB this is the Sky-PA of chip vertical.
-        in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
+        try:
+            in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
+        except:
+            in_fits = pyfits.open(ddir + in_files[i] + '.gz', ignore_missing_end=True)
         h = in_fits[0].header
         in_fits.close()
         pas[i]=360.+h['PARANG']+h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
@@ -514,7 +635,7 @@ class NIRC2(AOInstrument):
         subim[np.where(subbad)] = 0
         plt.clf()
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.title(h['TARGNAME'])
+        plt.title(hinfo['targname'])
         plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
         for ntry in range(1,15):
@@ -544,11 +665,16 @@ class NIRC2(AOInstrument):
         self.fix_bad_pixels(subim,subbad,fmask)
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
         plt.draw()
+        text_input = raw_input("Press <enter> to keep. Anything else then <enter> to reject...\n")
+        if (len(text_input)>0):
+            isgood = np.append(isgood,False)
+        else:
+            isgood = np.append(isgood,True)
         
         #Save the data and move on!
         cube[i,:,:]=subim
-    #Fine bad frames based on low peak count.
-    good = np.where(maxs > median_cut*np.median(maxs))
+    #Find bad frames based on low peak count.
+    good = np.where( (maxs > median_cut*np.median(maxs)) & isgood )
     good = good[0]
     if (len(good) < nf):
         print nf-len(good), "  frames rejected due to low peak counts."
@@ -564,6 +690,7 @@ class NIRC2(AOInstrument):
         h['SZY'] = szy
         h['DDIR'] = ddir
         #NB 'TARGNAME' is the standard target name.
+        h['TARGNAME'] = hinfo['targname']
         for i in range(nf):
             h['HISTORY'] = 'Input: ' + in_files[i]
         hl.append(pyfits.ImageHDU(cube,h))
@@ -625,7 +752,10 @@ class NIRC2(AOInstrument):
     nf = len(in_files)
     cube = np.zeros((nf,subarr,subarr))
     #Decide on the image size from the first file. !!! are x and y around the right way?
-    in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+    try:
+        in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+    except:
+        in_fits = pyfits.open(ddir + in_files[0] + '.gz', ignore_missing_end=True)
     h = in_fits[0].header
     in_fits.close()
     szx = h['NAXIS1']
@@ -647,14 +777,13 @@ class NIRC2(AOInstrument):
         except:
             print("Error - couldn't find kp/Fourier mask file: " +fmask_file+ " in directory: " + rdir)
             raise UserWarning
-        h_fmask = pyfits.getheader(rdir + fmask_file)
-        if (len(dark_file) == 0):
-            dark_file = h_fmask['DARK']
-        if (len(flat_file) == 0):
-            flat_file = h_fmask['FLAT']
+    if (len(dark_file) == 0):
+        dark_file = hinfo['dark_file']
+    if (len(flat_file) == 0):
+        flat_file = hinfo['flat_file']
 
     #Chop out the appropriate part of the flat, dark, bad arrays
-    (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy)
+    (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy, wave=hinfo['wave'])
     wbad = np.where(bad)
 
     #Go through the files, cleaning them one at a time and adding to the cube. 
@@ -668,7 +797,10 @@ class NIRC2(AOInstrument):
     backgrounds = np.zeros(nf)
     for i in range(nf):
         #First, find the position angles from the header keywords. NB this is the Sky-PA of chip vertical.
-        in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
+        try:
+            in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
+        except:
+            in_fits = pyfits.open(ddir + in_files[i] + '.gz', ignore_missing_end=True)
         h = in_fits[0].header
         in_fits.close()
         pas[i]=360.+h['PARANG']+h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
@@ -768,7 +900,7 @@ class NIRC2(AOInstrument):
         subim[np.where(subbad)] = 0
         plt.clf()
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.title(h['TARGNAME'])
+        plt.title(hinfo['targname']) 
         plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
         for ntry in range(1,15):
@@ -818,6 +950,7 @@ class NIRC2(AOInstrument):
         h['SZX'] = szx
         h['SZY'] = szy
         h['DDIR'] = ddir
+        h['TARGNAME'] = hinfo['targname']
         #NB 'TARGNAME' is the standard target name.
         for i in range(nf):
             h['HISTORY'] = 'Input: ' + in_files[i]

@@ -9,6 +9,7 @@ import numpy as np
 import pypoise
 import nirc2
 import pdb
+import os
 
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())
@@ -21,12 +22,22 @@ num_cubes = (len(sys.argv) - 5)//2
 fstart = sys.argv[5:5+num_cubes]
 nfs    = sys.argv[5+num_cubes:5+2*num_cubes]
 
-fnums = [int(sys.argv[5+i]) + np.arange(int(sys.argv[5+num_cubes+i])) for i in range(0,num_cubes)]
-extn = '.fits.gz'
-for j in range(len(fnums)):
-    files = [(ddir + '{0:04d}' + extn).format(i) for i in fnums[j]]
-    cube_file = pp.aoinst.cdir + 'cube' + str(fnums[j][0]) + '.fits'
-    if do_we_dither=='d':
-        cube = pp.aoinst.clean_dithered(files, out_file=cube_file)
-    else:
-        cube = pp.aoinst.clean_no_dither(files, out_file=cube_file)
+if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
+    fnums = [int(sys.argv[5+i]) + np.arange(int(sys.argv[5+num_cubes+i])) for i in range(0,num_cubes)]
+    extn = '.fits'
+    for j in range(len(fnums)):
+        files = [('n{0:04d}' + extn).format(i) for i in fnums[j]]
+        cube_file = 'cube' + str(fnums[j][0]) + '.fits'
+        manual_click=False
+        try:
+            if (do_we_dither[1]=='m'):
+                manual_click=True
+        except:
+            manual_click=False
+        if do_we_dither[0]=='d':
+            cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click)
+        else:
+            cube = pp.aoinst.clean_no_dither(files, out_file=cube_file, manual_click=manual_click)
+        
+with open(pp.aoinst.cdir + "CLEAN_COMPLETE","w+") as f:
+    f.close()

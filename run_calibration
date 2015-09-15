@@ -11,13 +11,22 @@ import numpy as np
 import pypoise
 import nirc2
 import pdb
+import os
 
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())
 
-pp.aoinst.rdir = sys.argv[1] #'/Users/mireland/tel/nirc2/redux/130717/'
-pp.aoinst.ddir = sys.argv[2] #'/Users/mireland/data/nirc2/130717/n'
+pp.aoinst.rdir = sys.argv[1] 
+pp.aoinst.ddir = sys.argv[2] 
+
+#pp.aoinst.rdir = '/Users/mireland/tel/nirc2/analysis/ScoBin15a/'
+#pp.aoinst.ddir = '/Users/mireland/data/nirc2/150623/'
 
 pp.aoinst.read_summary_csv()
-pp.aoinst.make_all_darks()
-pp.aoinst.make_all_flats()
+
+if (not os.path.exists(pp.aoinst.rdir + "CAL_COMPLETE")):
+    pp.aoinst.make_all_darks()
+    pp.aoinst.make_all_flats()
+
+with open(pp.aoinst.rdir + "CAL_COMPLETE","w+") as f:
+    f.close()

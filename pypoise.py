@@ -11,6 +11,7 @@ import scipy.ndimage as nd
 import pdb
 import glob
 import os
+plt.ion()
     
 class PYPOISE():
     """The PYPOISE Class, that enables the POISE algorithm.
@@ -87,7 +88,10 @@ class PYPOISE():
             rdir = self.aoinst.rdir
         if (ddir == ''):
             ddir = self.aoinst.ddir
-        in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+        try:
+            in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
+        except:
+            in_fits = pyfits.open(ddir + in_files[0] + '.gz', ignore_missing_end=True)
         h = in_fits[0].header
         in_fits.close()
 
