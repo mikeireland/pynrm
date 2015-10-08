@@ -29,15 +29,15 @@ if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
         files = [('n{0:04d}' + extn).format(i) for i in fnums[j]]
         cube_file = 'cube' + str(fnums[j][0]) + '.fits'
         manual_click=False
-        try:
-            if (do_we_dither[1]=='m'):
-                manual_click=True
-        except:
-            manual_click=False
-        if do_we_dither[0]=='d':
-            cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click)
+        destripe=True
+        if (do_we_dither.find('s') > 0):
+            destripe=False
+        if (do_we_dither.find('m') > 0):
+            manual_click=True
+        if (do_we_dither.find('d') > 0):
+            cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)
         else:
-            cube = pp.aoinst.clean_no_dither(files, out_file=cube_file, manual_click=manual_click)
+            cube = pp.aoinst.clean_no_dither(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)
         
 with open(pp.aoinst.cdir + "CLEAN_COMPLETE","w+") as f:
     f.close()
