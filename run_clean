@@ -30,11 +30,11 @@ if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
         cube_file = 'cube' + str(fnums[j][0]) + '.fits'
         manual_click=False
         destripe=True
-        if (do_we_dither.find('s') > 0):
+        if (do_we_dither.find('s') >= 0):
             destripe=False
-        if (do_we_dither.find('m') > 0):
+        if (do_we_dither.find('m') >= 0):
             manual_click=True
-        if (do_we_dither.find('d') > 0):
+        if (do_we_dither.find('d') >= 0):
             cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)
         else:
             cube = pp.aoinst.clean_no_dither(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)

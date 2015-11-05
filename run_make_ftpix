@@ -16,18 +16,28 @@ import os
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())
 
-if sys.argv[1] == 'd':
-    do_we_dither = True
-else:
-    do_we_dither = False
+dither_string = sys.argv[1]
 
+if (dither_string.find('s') >= 0):
+    destripe=False
+else:
+    destripe=True
+if (dither_string.find('m') >= 0):
+    manual_click=True
+else:
+    manual_click=False
+if (dither_string.find('d') >= 0):
+    do_we_dither=True
+else
+    do_we_dither=False
+    
 pp.aoinst.rdir = sys.argv[2] 
 pp.aoinst.ddir = sys.argv[3] 
-pp.aoinst.cdir = sys.argv[4] 
-fstart = int(sys.argv[5])
-nfs    = int(sys.argv[6])
+fstart = int(sys.argv[4])
+nfs    = int(sys.argv[5])
 
-#run_make_ftpix ~/tel/nirc2/analysis/ScoBin15a/ ~/data/nirc2/150623/ 194 8
+#run_make_ftpix n ~/tel/nirc2/analysis/ScoBin15a/ ~/data/nirc2/150623/ ./ 194 8
+#run_make_ftpix n ./ /Users/mireland/data/nirc2/141130/ 89 9
 
 extn = '.fits'
 

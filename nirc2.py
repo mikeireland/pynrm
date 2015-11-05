@@ -8,6 +8,7 @@ import matplotlib.cm as cm
 import time
 import glob
 import pdb
+import time
 
 from aoinstrument import AOInstrument 
 
@@ -56,13 +57,21 @@ class NIRC2(AOInstrument):
     if len(self.csv_dict) == 0:
         print("Error: Run read_summary_csv first. No darks made.")
         return
+    #Fill in elevation with a default value (45, for dome flat position) if there are fits header errors.
+    els = self.csv_dict['EL']
+    for i in range(len(els)):
+        try:
+            this_el = float(els[i])
+        except:
+            els[i] = '45.0'
+    els = els.astype(float)
     #If we're in the dome flat position with more than 1000 counts, this looks
     #like it could be a dome flat!
     flats_maybe = np.where( (self.csv_dict['MEDIAN_VALUE'].astype('float') > 1000) & 
-                            (np.abs(self.csv_dict['EL'].astype('float') - 45) < 0.01) )[0]
+                            (np.abs(els - 45) < 0.01) )[0]
     codes = []
     fluxes = self.csv_dict['MEDIAN_VALUE'][flats_maybe].astype(float)
-    for ix in range(len(self.csv_dict['EL'])):
+    for ix in range(len(els)):
         codes.append(self.csv_dict['FILTER'][ix] + self.csv_dict['NAXIS1'][ix] + self.csv_dict['NAXIS2'][ix] + 
             self.csv_dict['ITIME'][ix] + self.csv_dict['COADDS'][ix] + self.csv_dict['MULTISAM'][ix] + 
             self.csv_dict['SLITNAME'][ix])
@@ -78,9 +87,8 @@ class NIRC2(AOInstrument):
         #Less than 5 flats... don't bother.
         if (len(good_flats) >= 5):
             ffiles = [ddir + self.csv_dict['FILENAME'][ww] for ww in good_flats]
-            #Now look for lamp off files.
             lamp_off = np.where( (codes == c) & (np.array(self.csv_dict['MEDIAN_VALUE'].astype(float) < 600) & \
-                    (np.abs(self.csv_dict['EL'].astype(float) - 45) < 0.01) ) )[0]
+                    (np.abs(els - 45) < 0.01) ) )[0]
             if (len(lamp_off) >= 3):
                 #Use these lamp_off indexes to create a "special" dark.
                 dfiles = [ddir + self.csv_dict['FILENAME'][ww] for ww in lamp_off]
@@ -125,7 +133,7 @@ class NIRC2(AOInstrument):
     if (len(inst)==0):
         print "Error: could not find instrument in header..."
         raise UserWarning
-    if (self.instrument != inst):
+    if ((self.instrument != inst) & (inst[0:3] != '###')):
         print "Error: software expecting: ", self.instrument, " but instrument is: ", inst
         raise UserWarning
 
@@ -210,8 +218,16 @@ class NIRC2(AOInstrument):
     else:
         targname = h['TARGNAME']
     #The pupil orientation...
-    vertang_pa = h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
-    pa = vertang_pa + h['PARANG']
+    try:
+        el = float(h['EL'])
+    except:
+        el = -1
+    if (el > 0):
+        vertang_pa = h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
+        pa = vertang_pa + h['PARANG']
+    else:
+        vertang_pa=np.NaN
+        pa = np.NaN
     #Find the pupil type and parameters for the pupil...
     pupil_params=dict()
     if (fwo == '9holeMsk'):
@@ -396,7 +412,8 @@ class NIRC2(AOInstrument):
         var_dark += (darks[i,:,:] - med_dark)**2
     var_dark -= (max_dark - med_dark)**2
     var_dark /= nf-2
-    med_diff = np.median(np.abs(med_dark - np.median(med_dark)))
+    #We need to threshold the med_diff quantity in case of low-noise, many subread images
+    med_diff = np.maximum(np.median(np.abs(med_dark - np.median(med_dark))),1.0)
     print "Median difference: " + str(med_diff)
     med_var_diff = np.median(np.abs(var_dark - np.median(var_dark)))
     bad_med = np.abs(med_dark - np.median(med_dark)) > med_threshold*med_diff
@@ -480,7 +497,10 @@ class NIRC2(AOInstrument):
             if wave>0:
                 #Find the flat file with the nearest wavelengths. In this case, ignore
                 #corona flats.
-                flat_files = glob.glob(rdir + 'flat*corona*fits')
+                flat_files = glob.glob(rdir + 'flat*fits')
+                if len(flat_files)==0:
+                    print("No flat! Are you sure that this is your reduction directory? " + rdir)
+                    pdb.set_trace()
                 waves = []
                 for ffile in flat_files:
                     if ffile.find("corona") > 0:
@@ -488,14 +508,15 @@ class NIRC2(AOInstrument):
                     else:
                         try: 
                             wave_file = pyfits.getheader(ffile)['WAVE']
-                            waves.append(waves)
+                            waves.append(wave_file)
                         except:
                             print("Missing header keyword WAVE!")
                             pdb.set_trace()
                 waves = np.array(waves)
                 ix = np.argmin(np.abs(waves - wave))
-                new_flat_file = flat_file[ix][len(rdir):]
-                print("*** Flat file {0:s} not found! Using {1:s} intead. ***") 
+                new_flat_file = flat_files[ix][len(rdir):]
+                print("*** Flat file {0:s} not found! Using {1:s} intead. ***".format(flat_file, new_flat_file)) 
+                flat_file = new_flat_file
                 flat = pyfits.getdata(rdir + flat_file,0)
             else:
                 print("ERROR - no flat file!")
@@ -519,7 +540,7 @@ class NIRC2(AOInstrument):
     else:
         dark = np.zeros((szy,szx))
     return (flat,dark,bad)
-        
+          
  def clean_no_dither(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
      subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, ddir='', rdir='', cdir='', manual_click=False):
     """Clean a series of fits files, including: applying the dark, flat, 
@@ -552,163 +573,14 @@ class NIRC2(AOInstrument):
     -------
     The cube of cleaned frames.
     """
-    #Allow over-riding default data, cube and analysis directories.
-    if (ddir == ''):
-        ddir = self.ddir
-    if (rdir == ''):
-        rdir = self.rdir
-    if (cdir == ''):
-        cdir = self.cdir
-    #Allocate data for the cube
-    nf = len(in_files)
-    cube = np.zeros((nf,subarr,subarr))
-    #Decide on the image size from the first file. !!! are x and y around the right way?
-    try:
-        in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
-    except:
-        in_fits = pyfits.open(ddir + in_files[0] + '.gz', ignore_missing_end=True)
-    h = in_fits[0].header
-    in_fits.close()
-    szx = h['NAXIS1']
-    szy = h['NAXIS2']
-    #Extract important information from the header...
-    hinfo = self.info_from_header(h)
-    rnoise = hinfo['rnoise']
-    gain = hinfo['gain']
-    #If we set the fmask manually, then don't use the file.
-    if len(fmask) == 0:
-        #If no file is given, find it automatically.
-        if len(fmask_file) == 0:
-            fmask_file = hinfo['ftpix_file']
-        try:
-            fmask = pyfits.getdata(rdir + fmask_file,1)
-        except:
-            print("Error - couldn't find kp/Fourier mask file: " +fmask_file+ " in directory: " + rdir)
-            raise UserWarning
-    if (len(dark_file) == 0):
-        dark_file = hinfo['dark_file']
-    if (len(flat_file) == 0):
-        flat_file = hinfo['flat_file']
-
-    #Chop out the appropriate part of the flat, dark, bad arrays
-    (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy, wave=hinfo['wave'])
-
-    #Go through the files, cleaning them one at a time
-    xpeaks = np.zeros(nf)
-    ypeaks = np.zeros(nf)
-    maxs = np.zeros(nf)
-    pas = np.zeros(nf)
-    backgrounds = np.zeros(nf)
-    isgood = np.array([], dtype=bool)
-    for i in range(nf):
-        #First, find the position angles from the header keywords. NB this is the Sky-PA of chip vertical.
-        try:
-            in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
-        except:
-            in_fits = pyfits.open(ddir + in_files[i] + '.gz', ignore_missing_end=True)
-        h = in_fits[0].header
-        in_fits.close()
-        pas[i]=360.+h['PARANG']+h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
-        #Read in the image - making a nonlinearity correction
-        im = self.linearize_nirc2(ddir + in_files[i])
-        #Destripe, then clean the data using the dark and the flat. This might change
-        #the background, so allow for this.
-        backgrounds[i] = np.median(im)
-        im = self.destripe_nirc2(im, do_destripe=destripe)
-        backgrounds[i] -= np.median(im)
-        #!!! It is debatable whether the dark on the next line is really useful... but setting 
-        #dark_file='' removes its effect.
-        im = (im - dark)/flat
-        #Find the star... 
-        im *= 1.0 - bad
-        im_filt = nd.filters.median_filter(im,size=5)
-        max_ix = np.unravel_index(im_filt.argmax(), im_filt.shape)
-        print("Maximum x,y: " + str(max_ix[1])+', '+ str(max_ix[0]))
-        xpeaks[i] = max_ix[1]
-        ypeaks[i] = max_ix[0]
-        maxs[i] = im[max_ix[0],max_ix[1]]
-        subim = np.roll(np.roll(im,subarr/2-max_ix[0],axis=0),subarr/2-max_ix[1],axis=1)
-        subim = subim[0:subarr,0:subarr]
-        subbad = np.roll(np.roll(bad,subarr/2-max_ix[0],axis=0),subarr/2-max_ix[1],axis=1)
-        subbad = subbad[0:subarr,0:subarr]
-        new_bad = subbad.copy()    
-        subim[np.where(subbad)] = 0
-        plt.clf()
-        plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.title(hinfo['targname'])
-        plt.draw()
-        #Iteratively fix the bad pixels and look for more bad pixels...
-        for ntry in range(1,15):
-            #Correct the known bad pixels
-            self.fix_bad_pixels(subim,new_bad,fmask)
-            #Search for more bad pixels. Lets use a Fourier technique here...
-            extra_bad_ft = np.fft.rfft2(subim)*fmask
-            extra_bad = np.real(np.fft.irfft2(extra_bad_ft))
-            mim = nd.filters.median_filter(subim,size=5)
-            #NB The next line *should* take experimentally determined readout noise into account !!!
-            extra_bad = np.abs(extra_bad/np.sqrt(np.maximum(gain*mim + rnoise**2,rnoise**2)))
-            unsharp_masked = extra_bad-nd.filters.median_filter(extra_bad,size=3)
-            current_threshold = np.max([0.3*np.max(unsharp_masked[new_bad == 0]), extra_threshold*np.median(extra_bad)])
-            extra_bad = unsharp_masked > current_threshold
-            n_extra_bad = np.sum(extra_bad)
-            print(str(n_extra_bad)+" extra bad pixels or cosmic rays identified. Attempt: "+str(ntry))
-            subbad += extra_bad
-            if (ntry == 1):
-                new_bad = extra_bad
-            else:
-                new_bad += extra_bad
-                new_bad = extra_bad>0
-            if (n_extra_bad == 0):
-                break
-        
-        #Now re-correct both the known and new bad pixels at once.
-        self.fix_bad_pixels(subim,subbad,fmask)
-        plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.draw()
-        text_input = raw_input("Press <enter> to keep. Anything else then <enter> to reject...\n")
-        if (len(text_input)>0):
-            isgood = np.append(isgood,False)
-        else:
-            isgood = np.append(isgood,True)
-        
-        #Save the data and move on!
-        cube[i,:,:]=subim
-    #Find bad frames based on low peak count.
-    good = np.where( (maxs > median_cut*np.median(maxs)) & isgood )
-    good = good[0]
-    if (len(good) < nf):
-        print nf-len(good), "  frames rejected due to low peak counts."
-    cube = cube[good,:,:]
-    nf = np.shape(cube)[0]
-    #If a filename is given, save the file.
-    if (len(out_file) > 0):
-        hl = pyfits.HDUList()
-        h['RNOISE'] = rnoise
-        h['PGAIN'] = gain #P means python
-#        h['PFILTER'] = !!! Not complete !!!
-        h['SZX'] = szx
-        h['SZY'] = szy
-        h['DDIR'] = ddir
-        #NB 'TARGNAME' is the standard target name.
-        h['TARGNAME'] = hinfo['targname']
-        for i in range(nf):
-            h['HISTORY'] = 'Input: ' + in_files[i]
-        hl.append(pyfits.ImageHDU(cube,h))
-        #Add in the original peak pixel values, forming the image centers in the cube.
-        #(this is needed for e.g. undistortion)
-        col1 = pyfits.Column(name='xpeak', format='E', array=xpeaks)
-        col2 = pyfits.Column(name='ypeak', format='E', array=ypeaks)
-        col3 = pyfits.Column(name='pa', format='E', array=pas)
-        col4 = pyfits.Column(name='max', format='E', array=maxs)
-        col5 = pyfits.Column(name='background', format='E', array=backgrounds)
-        cols = pyfits.ColDefs([col1, col2,col3,col4,col5])
-        hl.append(pyfits.new_table(cols))
-        hl.writeto(cdir+out_file,clobber=True)
-    return cube
+    return self.clean_dithered(in_files, fmask_file=fmask_file,dark_file=dark_file, flat_file=flat_file, fmask=fmask,\
+     subarr=subarr,extra_threshold=extra_threshold,out_file=out_file,median_cut=median_cut, destripe=destripe, \
+     ddir=ddir, rdir=rdir, cdir=cdir, manual_click=manual_click, dither=False)
+    
     
  def clean_dithered(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
-    manual_click=False, ddir='', rdir='', cdir=''):
+    manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1):
     """Clean a series of fits files, including: applying the dark and flat, removing bad pixels and
     cosmic rays, creating a `rough supersky' in order to find a mean image, identifying the target and any 
     secondary targets, identifying appropriate sky frames for each frame and subtracting these off. In
@@ -823,7 +695,10 @@ class NIRC2(AOInstrument):
         full_cube[i,:,:] = im
         
     #Find the rough "supersky", by taking the 25th percentile of each pixel.
-    rough_supersky = np.percentile(full_cube, 25.0, axis=0)
+    if (dither):
+        rough_supersky = np.percentile(full_cube, 25.0, axis=0)
+    else:
+        rough_supersky = np.zeros(im.shape)
     #Subtract this supersky off each frame. Don't worry - all strictly pixel-dependent
     #offsets are removed in any case so this doesn't bias the data.
     for i in range(nf):
@@ -862,6 +737,7 @@ class NIRC2(AOInstrument):
     plt.plot(max_ix[1], max_ix[0], 'wx', markersize=20,markeredgewidth=2)
     plt.draw()
     print("Maximum x,y: " + str(max_ix[1])+', '+ str(max_ix[0]))
+    time.sleep(show_wait)
 
     #Set the xpeaks and ypeaks values (needed for sub-arraying later)
     for i in range(nf):
@@ -881,15 +757,18 @@ class NIRC2(AOInstrument):
         subflat = np.roll(np.roll(flat,subarr/2-ypeaks[i],axis=0),subarr/2-xpeaks[i],axis=1)
         subflat = subflat[0:subarr,0:subarr]
         #Find the frames that are appropriate for a dither...
-        w = np.where( (xpeaks - xpeaks[i])**2 + (ypeaks - ypeaks[i])**2 > 0.5*subarr**2 )[0]
-        if len(w) == 0:
-            print "Error: Can not find sky from dithered data - use clean_no_dither for {0:s}".format(in_files[0])
-            return
-        #To avoid too many extra bad pixels, we'll use a median here.
-        sky = np.median(subims[w,:,:], axis=0)
-        backgrounds[i] += np.median(sky)
-        #Subtract the sky then re-apply the flat.
-        subim = (subims[i,:,:] - sky)/subflat
+        if (dither):
+            w = np.where( (xpeaks - xpeaks[i])**2 + (ypeaks - ypeaks[i])**2 > 0.5*subarr**2 )[0]
+            if len(w) == 0:
+                print "Error: Can not find sky from dithered data - use dither=False for {0:s}".format(in_files[0])
+                return
+            #To avoid too many extra bad pixels, we'll use a median here.
+            sky = np.median(subims[w,:,:], axis=0)
+            backgrounds[i] += np.median(sky)
+            #Subtract the sky then re-apply the flat.
+            subim = (subims[i,:,:] - sky)/subflat
+        else:
+            subim = subims[i,:,:]/subflat
         #Find the peak from the sub-image.
         im_filt = nd.filters.median_filter(subim,size=5)
         max_ix = np.unravel_index(im_filt.argmax(), im_filt.shape)

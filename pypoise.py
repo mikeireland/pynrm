@@ -145,6 +145,7 @@ class PYPOISE():
             pmask -= ( ix[0]**2 + ix[1]**2 < (inner_diam/wave*rad_pixel*subarr/2.0)**2 )
             pmask_bighole -= ( ix[0]**2 + ix[1]**2 < (inner_diam/wave*rad_pixel*subarr/2.0)**2 )
         elif (hinfo['pupil_type'] == 'keck'):
+            print("Using Keck pupil")
             badpmask_threshold = 0.4
             lowps_threshold = 0.1
             nbad_threshold = 4
@@ -189,6 +190,7 @@ class PYPOISE():
         #We can now compute ftpix,then tweak the pmask to match the actual Fourier
         #power
         if not ignore_data:
+            print("Cleaning data...")
             if ignore_dark:
                 dark_file=''
             if dither:
@@ -205,6 +207,7 @@ class PYPOISE():
                 else:
                     ps += np.abs(ftim)**2
                     ftim_sum += ftim
+            print("Looking for low Fourier power")
             ps -= np.mean(ps[np.where(fmask)])
             phases = np.angle(ftim_sum)
             #We now find any power spectrum values that are unusually low, or any phases
