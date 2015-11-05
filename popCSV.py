@@ -116,6 +116,6 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
                 
                 j+=1
                 pb.progress(j)
-            write_textfile(g, last_block_string, block_string, name)
+            write_textfile(g, block_string, name)
         return 1
 
