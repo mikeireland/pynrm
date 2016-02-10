@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+
+#import pyximport; pyximport.install()
+from __future__ import print_function
+import popCSV
+import time#, jpb
+
+print('Program started at time:')
+print(time.asctime( time.localtime(time.time()) ))
+
+path = './'#jpb.ask('Which directory to run this code?','./') # path to root of directory to walk through, relative to location of script
+outfile = path + "datainfo.csv" # the output file to write to
+textfile = path + "blockinfo.txt" # the output file to write to
+
+keys = ["FRAME", \
+        "IMGTYPE", \
+#        "OBJECT", \
+        "DATAMIN", \
+        "DATAMAX", \
+        "EXPTIME", \
+        "UTMIDDLE"]
+        
+blockkeys = ["IMGTYPE", "EXPTIME"]
+        
+# The headers for analysis done on the files
+# MULTISAM is 1 if SAMPMODE is 2, else write value in header
+# PEAKPIX is one operation, but returns 2 values, needs two columns
+# SATURATED be sure to set the threshold value for level before saturated
+operations = ["PEAKPIX(X)", \
+              "PEAKPIX(Y)", \
+              "PEAK_VALUE", \
+              "MEDIAN_VALUE", \
+              "SATURATED"]
+
+# try to be fancy writing the column headers
+# Directory and Filename are always going to be the first two columns for the output
+colheads = ["DIRECTORY", \
+            "FILENAME" \
+           ]
+
+colheads=colheads+keys+operations
+
+########################
+# Begin main part of the script
+########################
+
+popCSV.popCSV(keys,operations,colheads,path,outfile,textfile=textfile,blockkeys=blockkeys,threshold=60000,fnum_prefix="",add_filename=True)
+
+
+print('CSV generation finished at time:')
+print(time.asctime( time.localtime(time.time()) ))
