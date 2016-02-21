@@ -357,7 +357,7 @@ class PYPOISE():
             backgrounds = cube_extn['background']
             h = pyfits.getheader(cdir + cube_file)
             targname = h['TARGNAME']
-            rnoise = h['RNOISE']*2 #!!! This should be removed, or put in as an option !!!
+            rnoise = h['RNOISE']
             gain = h['PGAIN']
             hinfo = self.aoinst.info_from_header(h)
             #If we don't over-write the ptok_file, use the default
@@ -434,6 +434,7 @@ class PYPOISE():
                 if (i % add_noise == 0):
                     sig = 0.0
                 else:
+                    #Add noise based on readout noise, target shot noise and background noise.
                     sig = np.sqrt(np.maximum(im_raw + backgrounds[i//add_noise],0)/gain + rnoise**2)
                 im = im_raw + sig*np.random.normal(size=im_raw.shape)
             else:
@@ -821,7 +822,8 @@ class PYPOISE():
     def kp_to_implane(self,ptok_file=[], pas=[0], summary_files=[], pxscale=10.0, sz=128,
             out_file='',rdir='', cdir='',use_powerspect=True):
         """Here we convert kernel-phases (and power spectra linear combinations) to their image-plane representation,
-        in sky coordinates. 
+        in sky coordinates. There is an inbuilt assumption that all targets have the same kernel-phases: this 
+        is not appropriate when combining data from multiple nights.
     
         Parameters
         ----------
@@ -914,6 +916,7 @@ class PYPOISE():
             kp_implane=kp_implane.reshape((nt*(npsi+nps_comb),sz,sz))
         else:
             kp_implane=kp_implane.reshape((nt*npsi,sz,sz))
+        
         #If a savefile name is given, save the file!
         if (len(out_file) > 0):
             hl = pyfits.HDUList()
@@ -933,7 +936,8 @@ class PYPOISE():
         return kp_implane
 
 
-    def implane_fit_binary(self,kp_implane_file, summary_file='', out_file='',pa_vertical=0.0,to_sky_pa=False):
+    def implane_fit_binary(self,kp_implane_file, summary_file='', out_file='',pa_vertical=0.0, \
+            to_sky_pa=False, add_kp_sig=0.0, maxrad=np.inf):
         """A binary grid search to a kp_implane file.
     
         Parameters
@@ -960,16 +964,21 @@ class PYPOISE():
         h = pyfits.getheader(kp_implane_file)
         pxscale = h['PXSCALE']
         sz = kp_implane.shape[1]
+        #Make a radius array 
+        x = pxscale*(np.arange(sz)-sz//2)
+        xy = np.meshgrid(x,x)
+        rr = np.sqrt(xy[0]**2 + xy[1]**2)
+        
         if len(summary_file) > 0:
             d = pyfits.getdata(summary_file)
             header = pyfits.getheader(summary_file)
             pa_vertical = header['PA']
             kp_mn = d['kp_mn']
-            kp_sig = d['kp_sig']
+            kp_sig = d['kp_sig'] + add_kp_sig
         else:
             d = pyfits.getdata(kp_implane_file,1)
             kp_mn = d[0,:]
-            kp_sig = d[1,:]
+            kp_sig = d[1,:] + add_kp_sig
         crat = np.zeros((sz,sz))
         crat_sig = np.zeros((sz,sz))
         chi2 = np.zeros((sz,sz))
@@ -988,6 +997,7 @@ class PYPOISE():
         #Don't count negative contrast ratios.
         modified_chi2 = chi2.copy()
         modified_chi2[crat < 0] = np.max(modified_chi2)
+        modified_chi2[rr > maxrad] = np.max(modified_chi2)
         min_ix = np.unravel_index(modified_chi2.argmin(), modified_chi2.shape)
         best_rchi2 = chi2[min_ix[0], min_ix[1]]/(len(kp_sig) - 3)
         print "Minimum reduced chi2: ", best_rchi2
@@ -1166,8 +1176,9 @@ class PYPOISE():
         if len(self.aoinst.csv_dict) == 0:
             print("Error: Run read_summary_csv first. No darks made.")
             return
+        #Find the start and end file indices. Allow filenames in the csv to have e.g. .gz extensions
         if len(fstart)>0:
-            wstart = np.where(self.aoinst.csv_dict['FILENAME'] == fstart)[0]
+            wstart = np.where([f.find(fstart) >= 0 for f in self.aoinst.csv_dict['FILENAME']])[0]
             if len(wstart)==0:
                 print("Error: No file named " + fstart)
                 return
@@ -1175,7 +1186,7 @@ class PYPOISE():
         else:
             wstart = 0
         if len(fend)>0:
-            wend = np.where(self.aoinst.csv_dict['FILENAME'] == fend)[0]
+            wend = np.where([f.find(fend) >= 0 for f in self.aoinst.csv_dict['FILENAME']])[0]
             if len(wend)==0:
                 print("Error: No file named " + fend)
                 return
@@ -1232,11 +1243,19 @@ class PYPOISE():
         kp_files: string list, optional
             A list of kernel-phase files.
         """
-        if len(target_file)==0:
-            print("Target name not implemented yet!")
-            raise UserWarning
         if len(kp_files)==0:
             kpmn_files = glob.glob(self.aoinst.cdir + 'kpmn_*fits')
+        if len(target_file)==0:
+            for target_file_full in kpmn_files:
+                targname = pyfits.getheader(target_file_full)['TARGNAME']
+                if (targname.find(target) >= 0): 
+                    target_file = target_file_full[target_file_full.rfind('/')+1:]
+                    print("First Target File: " + target_file)
+                    break
+        if len(target_file) ==0:
+            print("Error: Target not found. Looking for: " + target)
+            raise UserWarning
+            
         h_target = pyfits.getheader(self.aoinst.cdir + target_file)
         targname = h_target['TARGNAME']
         cals = []
@@ -1276,6 +1295,7 @@ class PYPOISE():
             #Reject calibrators with more than double the median deviation from the median.
             ww = np.where(cal_kp_mads < 2*np.median(cal_kp_mads))[0]
             good_cals = np.array(cals)[ww]
+#        import pdb; pdb.set_trace() 
         self.poise_kerphase(kp_files[good_cals], out_file=poise_filename, use_powerspect=use_powerspect, beta=beta)
         summary_files = [targname + '_poise_' + cube for cube in cube_files[src]]
         for ix, cubename in enumerate(cube_files[src]):

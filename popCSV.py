@@ -10,22 +10,38 @@ warnings.filterwarnings('ignore')
 #A global
 last_fnum = 0
 last_block_string = ""
+last_name=""
 
-def write_textfile(g, block_string, name):
+def write_textfile(g, block_string, name,f_ix,fnum_prefix="",add_filename=False):
     global last_fnum
     global last_block_string
+    global last_name
     if (last_block_string == block_string):
         return 
-    current_fnum = int(name[name.find("n")+1:name.find(".fit")])
+    if len(fnum_prefix) > 0:
+        current_fnum = int(name[name.find(fnum_prefix)+1:name.find(".fit")])
+    else:
+        current_fnum=f_ix
     numstr = "{0:04d} {1:02d} ".format(last_fnum, current_fnum-last_fnum)
-    last_fnum = current_fnum
     if (last_block_string == ""):
         last_block_string=block_string
+        last_name=name
         return
-    g.write(numstr+last_block_string + '\n')
+    if add_filename:
+        g.write(numstr+last_block_string + ' ' + last_name + '\n')    
+    else:
+        g.write(numstr+last_block_string + '\n')
+    last_fnum = current_fnum
+    last_name = name
     last_block_string=block_string
 
-def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
+def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],threshold=20000,fnum_prefix="n",add_filename=False):
+    """Populate a CSV file containing information about the fits headers
+    
+    Parameters
+    ----------
+    threshold: int
+        The threshold before the file is considered saturated"""
     if ( (len(textfile)>0) & (len(blockkeys)>0) ):
         try:
             g=open(textfile,'w')
@@ -54,7 +70,7 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
             print 'Surveying directory ',root
             pb=pbclass.progressbarClass(np.size(files)-1)
             j=0
-            for name in files:
+            for f_ix,name in enumerate(files):
                 if "fits" in name:
                     pathAndName = os.path.join(root,name)
                     try:
@@ -84,11 +100,12 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
                             print("Error with key" + i)
 
 
-                    #start with manual operations
-                    if prihdr["SAMPMODE"] == 2:
-                        values.append("1")
-                    else:
-                        values.append(str(prihdr["MULTISAM"]))
+                    #start with manual operations specific to telescopes
+                    if ("CURRINST" in prihdr.keys() and prihdr["CURRINST"] == "NIRC2"):
+                        if prihdr["SAMPMODE"] == 2:
+                            values.append("1")
+                        else:
+                            values.append(str(prihdr["MULTISAM"]))
 
                     # filtered version of the file used for peak and saturated
                     #filtered = tools.filter_image(pathAndName)
@@ -101,9 +118,11 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
                     # median pixel value in the image
                     values.append(str(np.median(image)))
                     # saturated
-                    threshold = 20000 # max pixel value before considered saturated
                     #takes a numpy array, divides by the number of coadds and compares against threshold. returns true if peak pixel is above threshold
-                    saturated= np.max(image/prihdr["coadds"]) > threshold
+                    if "COADDS" in prihdr.keys():
+                        saturated= np.max(image/prihdr["COADDS"]) > threshold
+                    else:
+                        saturated=np.max(image) > threshold
                 
                     values.append(str(saturated))
                     
@@ -112,10 +131,10 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[]):
                     
                     #Now write our block text file...
                     if textfile_open:
-                        write_textfile(g, block_string, name)
+                        write_textfile(g, block_string, name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename)
                 
                 j+=1
                 pb.progress(j)
-            write_textfile(g, block_string, name)
+            write_textfile(g, "", name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename)
         return 1
 

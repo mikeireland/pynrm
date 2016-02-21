@@ -309,7 +309,7 @@ class AOInstrument:
     sh = shape[0],a.shape[0]//shape[0],shape[1],a.shape[1]//shape[1]
     return a.reshape(sh).sum(-1).sum(1)
 
- def shift_and_ft(self,im, ftpix=()):
+ def shift_and_ft(self,im, ftpix=(),regrid_factor=3):
     """Sub-pixel shift an image to the origin and Fourier-transform it
 
     Parameters
@@ -325,20 +325,34 @@ class AOInstrument:
     ny = im.shape[0]
     nx = im.shape[1]
     if len(ftpix)==0:
-        im = self.regrid_fft(im,(3*ny,3*nx))
+        #Regrid onto a finer array
+        im = self.regrid_fft(im,(regrid_factor*ny,regrid_factor*nx))
+
+        #Find the peak
         shifts = np.unravel_index(im.argmax(), im.shape)
-        im = np.roll(np.roll(im,-shifts[0]+1,axis=0),-shifts[1]+1,axis=1)
+
+        #Shift to the peak (noting that given we're about to rebin... we need to offset 
+        #by half of the regrid_factor)
+        im = np.roll(np.roll(im,-shifts[0]+regrid_factor//2,axis=0),-shifts[1]+regrid_factor//2,axis=1)
+
+        #Rebin and FFT!
         im = self.rebin(im,(ny,nx))
         ftim = np.fft.rfft2(im)
     else:
+        #Shift to the origin within a pixel and Fourier transform
         shifts = np.unravel_index(im.argmax(), im.shape)
         im = np.roll(np.roll(im,-shifts[0]+1,axis=0),-shifts[1]+1,axis=1)
         ftim = np.fft.rfft2(im)
-        #Project onto the phase ramp in each direction...
+
+        #Find the Fourier phase
         arg_ftpix = np.angle(ftim[ftpix])
+
         #Compute phase in radians per Fourier pixel
         vcoord = ((ftpix[0] + ny/2) % ny)- ny/2
         ucoord = ftpix[1]
+        
+        #Project onto the phase ramp in each direction, and remove this phase ramp
+        #from the data.
         vphase = np.sum(arg_ftpix * vcoord)/np.sum(vcoord**2)
         uphase = np.sum(arg_ftpix * ucoord)/np.sum(ucoord**2)
         uv = np.meshgrid(np.arange(nx/2 + 1), ((np.arange(ny) + ny/2) % ny) - ny/2 )

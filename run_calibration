@@ -19,6 +19,12 @@ pp = pypoise.PYPOISE(nirc2.NIRC2())
 pp.aoinst.rdir = sys.argv[1] 
 pp.aoinst.ddir = sys.argv[2] 
 
+if pp.aoinst.rdir[-1] != '/':
+    pp.aoinst.rdir += '/'
+if pp.aoinst.ddir[-1] != '/':
+    pp.aoinst.ddir += '/'
+
+
 #pp.aoinst.rdir = '/Users/mireland/tel/nirc2/analysis/ScoBin15a/'
 #pp.aoinst.ddir = '/Users/mireland/data/nirc2/150623/'
 

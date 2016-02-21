@@ -11,13 +11,17 @@ import nirc2
 import pdb
 import os
 
+if len(sys.argv)==1:
+    print("Useage: run_clean [u|s|m|d] rdir ddir cdir fstart [fstart1] [...] nfs [nfs1] [...]")
+    sys.exit()
+
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())
 
 do_we_dither = sys.argv[1]
-pp.aoinst.rdir = sys.argv[2] #'/Users/mireland/tel/nirc2/redux/130717/'
-pp.aoinst.ddir = sys.argv[3] #'/Users/mireland/data/nirc2/130717/n'
-pp.aoinst.cdir = sys.argv[4] #'./'
+pp.aoinst.rdir = sys.argv[2] + '/' #'/Users/mireland/tel/nirc2/redux/130717/'
+pp.aoinst.ddir = sys.argv[3] + '/' #'/Users/mireland/data/nirc2/130717/n'
+pp.aoinst.cdir = sys.argv[4] + '/' #'./'
 num_cubes = (len(sys.argv) - 5)//2
 fstart = sys.argv[5:5+num_cubes]
 nfs    = sys.argv[5+num_cubes:5+2*num_cubes]
@@ -30,14 +34,17 @@ if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
         cube_file = 'cube' + str(fnums[j][0]) + '.fits'
         manual_click=False
         destripe=True
+        dither=False
+        if (do_we_dither.find('u') >= 0):
+            subtract_median=True
         if (do_we_dither.find('s') >= 0):
             destripe=False
         if (do_we_dither.find('m') >= 0):
             manual_click=True
         if (do_we_dither.find('d') >= 0):
-            cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)
-        else:
-            cube = pp.aoinst.clean_no_dither(files, out_file=cube_file, manual_click=manual_click, destripe=destripe)
+            dither = True
+            
+        cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click, destripe=destripe, subtract_median=subtract_median, dither=dither)
         
 with open(pp.aoinst.cdir + "CLEAN_COMPLETE","w+") as f:
     f.close()

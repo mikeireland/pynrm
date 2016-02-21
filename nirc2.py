@@ -186,6 +186,9 @@ class NIRC2(AOInstrument):
     elif (fwi=='H'):
         wave=1.633e-6
         filter='H'
+    elif (fwo=='Hcont'):
+        wave=1.5804e-6
+        filter='Hcont'
     else:
         print "Unknown Filter!"
         pdb.set_trace()
@@ -321,13 +324,15 @@ class NIRC2(AOInstrument):
         quads[0] += delta
     #Subtract the background
     if subtract_median:
-        print "Subtracting Median..."
-        med = np.median(quads)
-        dispersion = np.median(np.abs(quads - med))
+        print "Subtracting Medians..."
         MED_DIFF_MULTIPLIER = 4.0
-        goodpix = np.where(np.abs(quads - med) < MED_DIFF_MULTIPLIER*dispersion)
-        med = np.median(quads[goodpix])
-        quads -= med
+        for i in range(4):
+            quad = quads[i,:,:]
+            med = np.median(quad)
+            dispersion = np.median(np.abs(quad - med))
+            goodpix = np.where(np.abs(quad - med) < MED_DIFF_MULTIPLIER*dispersion)
+            med = np.median(quad[goodpix])
+            quads[i,:,:] -= med
     if do_destripe:
         quads = quads.reshape((4,s[0]/2,s[1]/16,8))
         stripes = quads.copy()
@@ -580,7 +585,7 @@ class NIRC2(AOInstrument):
     
  def clean_dithered(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
-    manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1):
+    manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1, subtract_median=False):
     """Clean a series of fits files, including: applying the dark and flat, removing bad pixels and
     cosmic rays, creating a `rough supersky' in order to find a mean image, identifying the target and any 
     secondary targets, identifying appropriate sky frames for each frame and subtracting these off. In
@@ -684,7 +689,7 @@ class NIRC2(AOInstrument):
         #Destripe, then clean the data using the dark and the flat. This might change
         #the background, so allow for this.
         backgrounds[i] = np.median(im)
-        im = self.destripe_nirc2(im, do_destripe=destripe)
+        im = self.destripe_nirc2(im, do_destripe=destripe, subtract_median=subtract_median)
         backgrounds[i] -= np.median(im)
         #!!! It is debatable whether the dark on the next line is really useful... but setting 
         #dark_file='' removes its effect.

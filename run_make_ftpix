@@ -5,6 +5,7 @@ A script that takes a set of directories and file numbers and cleans data approp
 The default subarr is 256, in order for full compatability with default IDL code.
 """
 
+from __future__ import print_function, division
 import sys
 import numpy as np
 # This includes an AO Instrument called "aoinst"
@@ -12,6 +13,10 @@ import pypoise
 import nirc2
 import pdb
 import os
+
+if len(sys.argv)==1:
+    print("Useage: run_make_ftpix [s|m|d] rdir ddir fstart nfs")
+    sys.exit()
 
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())
@@ -28,11 +33,11 @@ else:
     manual_click=False
 if (dither_string.find('d') >= 0):
     do_we_dither=True
-else
+else:
     do_we_dither=False
     
-pp.aoinst.rdir = sys.argv[2] 
-pp.aoinst.ddir = sys.argv[3] 
+pp.aoinst.rdir = sys.argv[2] + '/' 
+pp.aoinst.ddir = sys.argv[3] + '/' 
 fstart = int(sys.argv[4])
 nfs    = int(sys.argv[5])
 
