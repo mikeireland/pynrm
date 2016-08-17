@@ -5,6 +5,8 @@ A script that takes a set of directories and file numbers and makes python calib
 Note that flats are not always made... extra logical links could be useful.
 """
 
+from __future__ import print_function, division
+
 import sys
 import numpy as np
 # This includes an AO Instrument called "aoinst"
@@ -12,6 +14,11 @@ import pypoise
 import nirc2
 import pdb
 import os
+
+if len(sys.argv) < 3:
+    print("Useage: run_calibration REDUCTION_DIR DATA_DIR")
+    sys.exit()
+
 
 #Create a pypoise instance with a nirc2 AO instrument
 pp = pypoise.PYPOISE(nirc2.NIRC2())

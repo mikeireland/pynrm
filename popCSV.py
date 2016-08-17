@@ -71,7 +71,7 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],thresh
             pb=pbclass.progressbarClass(np.size(files)-1)
             j=0
             for f_ix,name in enumerate(files):
-                if "fits" in name:
+                if "fit" in name:
                     pathAndName = os.path.join(root,name)
                     try:
                         prihdr = pyfits.getheader(pathAndName,ignore_missing_end=True) # get the primary header and values
@@ -109,7 +109,10 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],thresh
 
                     # filtered version of the file used for peak and saturated
                     #filtered = tools.filter_image(pathAndName)
-                    filtered = tools.filter_image(image)
+                    if len(image.shape)==2:
+                        filtered = tools.filter_image(image)
+                    else:
+                        filtered = np.median(image,axis=2)
                     # peak pixel
                     peakpix = tools.peak_coords(filtered)
                     values.append(str(peakpix[0])) # X coord of peak pixel

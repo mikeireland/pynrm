@@ -216,7 +216,7 @@ class NIRC2(AOInstrument):
     rnoise = 50.0/gain/np.sqrt(multisam)*np.sqrt(h['COADDS'])
     #Find the appropriate dark file if needed.
     dark_file = self.get_dark_filename(h)
-    if (h['OBSDNAME'] == 'sodiumDichroic'):
+    if ( (h['OBSDNAME'] == 'sodiumDichroic') & (h['TARGNAME'][0:2] == 'tt')):
         targname = h['OBJECT']
     else:
         targname = h['TARGNAME']
