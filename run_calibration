@@ -2,6 +2,8 @@
 """
 A script that takes a set of directories and file numbers and makes python calibrations.
 
+It is important to note that run_csv has to be run first.
+
 Note that flats are not always made... extra logical links could be useful.
 """
 
