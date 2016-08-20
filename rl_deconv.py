@@ -1,6 +1,9 @@
 """This makes a simple Richardson-Lucy deconvolution on a cleaned data cube, with
 some reference calibrator images. Input data have to be neatly packaged in a single
-data cube. """
+data cube. 
+
+To make a "good_ims.fits" file, run "choose_psfs.py" after cleaning the data
+(e.g. with process_block called in a script go.py or run_clean)."""
 
 from __future__ import print_function, division
 
@@ -16,6 +19,18 @@ plt.ion()
 dir = '/Users/mireland/tel/nirc2/redux/IRS48/'
 filename = dir + 'good_ims.fits'
 pa = 317.4 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
+radec = [246.9049584,-23.49026944]
+
+radec = [276.124,-29.780]
+dir = '/Users/mireland/tel/nirc2/redux/HD169142/2014/'
+filename = dir + 'good_ims.fits'
+pa = 337.5 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
+
+#dir = '/Users/mireland/tel/nirc2/redux/HD169142/2016/'
+#filename = dir + 'good_ims.fits'
+#pa = 329.0 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
+
+subtract_median=True
 
 #Should be automatic from here. Things to play with include niter, and the initial
 #model
@@ -26,6 +41,12 @@ cal_ims = pyfits.getdata(filename,1)
 sz = tgt_ims.shape[1]
 best_models = np.zeros( tgt_ims.shape )
 best_rms = np.zeros( tgt_ims.shape[0] )
+
+if subtract_median:
+    for i in range(len(cal_ims)):
+        cal_ims[i] -= np.median(cal_ims[i])
+    for i in range(len(tgt_ims)):
+        tgt_ims[i] -= np.median(tgt_ims[i])
 
 #Loop through all target images, and make the best deconvolution possible for each image.
 for i in range(tgt_ims.shape[0]):
@@ -84,6 +105,8 @@ best_models[:,sz//2,sz//2]=0
 final_image = np.mean(best_models,axis=0)
 
 image = final_image/np.max(final_image)
+image_sub = image - np.roll(np.roll(image[::-1,::-1],1,axis=0),1,axis=1)
+
 plt.imshow(np.arcsinh(image/0.1), interpolation='nearest', cmap=cm.cubehelix)
 plt.plot(sz//2,sz//2, 'r*', markersize=20)
 tic_min = np.min(image)
@@ -94,8 +117,8 @@ tics = np.sinh(tics)*0.1
 hdu = pyfits.PrimaryHDU(image)
 costerm = np.cos(np.radians(pa))*0.01/3600.
 sinterm = np.sin(np.radians(pa))*0.01/3600.
-hdu.header['CRVAL1']=246.9049584
-hdu.header['CRVAL2']=-23.49026944
+hdu.header['CRVAL1']=radec[0]
+hdu.header['CRVAL2']=radec[1]
 hdu.header['CTYPE1']='RA---TAN'
 hdu.header['CTYPE2']='DEC--TAN'
 hdu.header['CRPIX1']=sz//2
@@ -112,4 +135,9 @@ fig.show_colorscale(cmap=cm.cubehelix, stretch='arcsinh',vmax=1, vmid=0.05)
 fig.add_colorbar()
 fig.add_grid()
 
-
+hdu.data=image_sub
+hdulist.writeto('deconv_image_sub.fits', clobber=True)
+fig2 = aplpy.FITSFigure('deconv_image_sub.fits')
+fig2.show_colorscale(cmap=cm.cubehelix, stretch='arcsinh',vmax=1, vmid=0.05)
+fig2.add_colorbar()
+fig2.add_grid()
