@@ -1,6 +1,22 @@
 #!/usr/bin/env python
 """
 A script that takes a set of directories and file numbers and cleans data appropriately
+
+Inputs are:
+
+Flags (u,s,m and/or d):
+	Dithered data analysis, destripe, manula click 
+rdir
+	Reduction directory, containing flats and darks.
+ddir
+	Raw data directory
+cdir
+	Cube directory, i.e. where to put cleaned data.
+fstart
+	File start number
+nfs
+	Number of files.
+
 """
 
 import sys
