@@ -106,7 +106,13 @@ class NIRC2(AOInstrument):
  def csv_block_string(self, ix):
     """Find a string from the summary csv file that identifies a unique configuration
     for a set of files to be processed as a block. It isn't *quite* correct 
-    because the target name sometimes stays the same with a target change. """
+    because the target name sometimes stays the same with a target change. 
+    
+    Parameters
+    ----------
+    ix: int
+        The index of the file (in the csv dictionary) that we want to get a block string 
+        for"""
     if len(self.csv_dict) == 0:
         print("Error: Run read_summary_csv first. No string returned.")
         return
