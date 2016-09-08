@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 plt.ion()
 
+outfile = 'good_ims.fits' #Change this name for your star!
 
 tgt_cubes = ['cube333.fits']
 cal_cubes = ['cube306.fits', 'cube322.fits','cube352.fits']
@@ -46,4 +47,4 @@ cal_ims = np.array(cal_ims)
 hdu1 = pyfits.PrimaryHDU(tgt_ims)
 hdu2 = pyfits.ImageHDU(cal_ims)
 hdulist = pyfits.HDUList([hdu1,hdu2])
-hdulist.writeto('good_ims.fits', clobber=True)
+hdulist.writeto(outfile, clobber=True)
