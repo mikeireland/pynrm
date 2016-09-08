@@ -18,6 +18,8 @@ class NIRC2(AOInstrument):
  #A global definition, for error-checking downstream
  instrument = 'NIRC2'    
  def is_bad_surrounded(self,bad):
+    #Returns matrix of booleans showing which pixels are surrounded by bad pixels
+    #"Surrounded" means there is at least one bad pixel in at least two directions
     numPixels = 3
     sz = len(bad)
     is_bad_to_left = np.zeros((sz,sz-numPixels))
@@ -42,7 +44,9 @@ class NIRC2(AOInstrument):
     return is_surrounded
 
  def saturated_pixels(self,image,header):
-    threshold = 19000
+    #Returns coordinates of all saturated pixels
+    #Uses image and header from file
+    threshold = 20000
     if "COADDS" in header.keys():
         pixels = np.where(image/header["COADDS"]>threshold)
     else:
