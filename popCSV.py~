@@ -126,6 +126,7 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],thresh
                         saturated= np.max(image/prihdr["COADDS"]) > threshold
                     else:
                         saturated=np.max(image) > threshold
+                    print saturated
                     values.append(str(saturated))
                     
                     line = "\n" + ",".join(values)

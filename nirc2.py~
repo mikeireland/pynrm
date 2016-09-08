@@ -44,9 +44,9 @@ class NIRC2(AOInstrument):
  def saturated_pixels(self,image,header):
     threshold = 19000
     if "COADDS" in header.keys():
-        pixels = np.where(image/header["COADDS"]>threshold)
+        pixels = np.where(image/header["COADDS"]) > threshold
     else:
-        pixels = np.where(image>threshold)
+        pixels = np.where(image) > threshold
     return pixels
 
  def make_all_darks(self, ddir='', rdir=''):

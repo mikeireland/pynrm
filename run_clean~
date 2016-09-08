@@ -26,6 +26,10 @@ import pypoise
 import nirc2
 import pdb
 import os
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option('-o','--object',default=0)
+(options,args) = parser.parse_args()
 if len(sys.argv)==1:
     print("Useage: run_clean [u|s|m|d] rdir ddir cdir fstart [fstart1] [...] nfs [nfs1] [...]")
     sys.exit()
@@ -38,11 +42,26 @@ pp.aoinst.rdir = sys.argv[2] + '/' #'/Users/mireland/tel/nirc2/redux/130717/'
 pp.aoinst.ddir = sys.argv[3] + '/' #'/Users/mireland/data/nirc2/130717/n'
 pp.aoinst.cdir = sys.argv[4] + '/' #'./'
 num_cubes = (len(sys.argv) - 5)//2
-fstart = sys.argv[5:5+num_cubes]
-nfs    = sys.argv[5+num_cubes:5+2*num_cubes]
+if options.object==0:
+    fstart = sys.argv[5:5+num_cubes]
+    nfs    = sys.argv[5+num_cubes:5+2*num_cubes]
+else:
+    textfile = open(pp.aoinst.ddir + 'blockinfo.txt','r')
+    fstart = []
+    nfs = []
+    for line in textfile:
+        if options.object in line:
+            entry = line.split(' ')
+            fstart.append(entry[0])
+            nfs.append(entry[1])
+        num_cubes = len(fstart)
+	
 
 if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
-    fnums = [int(fstart[i])+np.arange(int(nfs[i])) for i in range(0,num_cubes)]
+    if options.object==0:
+        fnums = [int(sys.argv[5+i]) + np.arange(int(sys.argv[5+num_cubes+i])) for i in range(0,num_cubes)]
+    else:
+        fnums = [int(fstart[i])+np.arange(int(nfs[i])) for i in range(0,num_cubes)]
     extn = '.fits'
     for j in range(len(fnums)):
         files = [('n{0:04d}' + extn).format(i) for i in fnums[j]]
