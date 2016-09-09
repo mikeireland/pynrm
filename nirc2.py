@@ -734,7 +734,6 @@ class NIRC2(AOInstrument):
 	#im = pyfits.getdata(ddir + in_files[i])
         
         saturation = self.saturated_pixels(im,hdr)
-        print saturation
         for ii in range(0,len(saturation[0])):
             row = saturation[0][ii]
             col = saturation[1][ii]
