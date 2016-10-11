@@ -851,7 +851,7 @@ class NIRC2(AOInstrument):
             extra_bad = np.real(np.fft.irfft2(extra_bad_ft))
             mim = nd.filters.median_filter(subim,size=5)
             #NB The next line *should* take experimentally determined readout noise into account !!!
-            extra_bad = np.abs(extra_bad/np.sqrt(np.maximum(gain*mim + rnoise**2,rnoise**2)))
+            extra_bad = np.abs(extra_bad/np.sqrt(np.maximum((backgrounds[i] + mim)/gain + rnoise**2,rnoise**2)))
             unsharp_masked = extra_bad-nd.filters.median_filter(extra_bad,size=3)
             current_threshold = np.max([0.3*np.max(unsharp_masked[new_bad == 0]), extra_threshold*np.median(extra_bad)])
             extra_bad = unsharp_masked > current_threshold
