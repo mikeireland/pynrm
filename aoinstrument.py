@@ -218,26 +218,37 @@ class AOInstrument:
     w = np.where(bad)
     badmat = np.zeros((len(w[0]),len(wft[0])),dtype='complex')
     print("Bad matrix shape: " + str(badmat.shape))
-    xy = np.meshgrid(2*np.pi*np.arange(im.shape[1]/2 + 1)/float(im.shape[1]),
-                    2*np.pi*np.arange(im.shape[0])/float(im.shape[0]))
+
+    #xy = np.meshgrid(2*np.pi*np.arange(im.shape[1]/2 + 1)/float(im.shape[1]),
+    #                2*np.pi*np.arange(im.shape[0])/float(im.shape[0]))
+    #Math should be correct here, but the bad pixel correction is still imaginary
+    xy = np.meshgrid(2*np.pi*np.arange(im.shape[1]//2 + 1)/float(im.shape[1]),
+       2*np.pi*(((np.arange(im.shape[0]) + im.shape[0]//2) % im.shape[0]) - im.shape[0]//2)/float(im.shape[0]))
+
     for i in range(len(w[0])):
         # Avoiding the fft is marginally faster here...
         bft = np.exp(-1j*(w[0][i]*xy[1] + w[1][i]*xy[0]))
         badmat[i,:] = bft[wft]
+
     #A dodgy pseudo-inverse that needs an "invert" is faster than the la.pinv function
     #Unless things are really screwed, the matrix shouldn't be singular.
     hb = np.transpose(np.conj(badmat))
     ibadmat = np.dot(hb,np.linalg.inv(np.dot(badmat,hb)))
+
     #Now find the image Fourier transform on the "zero" region in the Fourier plane
     #To minimise numerical errors, set the bad pixels to zero at the start.
     im[w]=0    
     ftimz = (np.fft.rfft2(im))[wft]
+
     # Now compute the bad pixel corrections. (NB a sanity check here is
     # that the imaginary part really is 0)
     addit = -np.real(np.dot(ftimz,ibadmat))
 #    plt.clf()
 #    plt.plot(np.real(np.dot(ftimz,ibadmat)), np.imag(np.dot(ftimz,ibadmat)))
 #    raise UserWarning
+
+#    import pdb; pdb.set_trace()
+
     im[w] += addit
     return im
 
