@@ -43,10 +43,19 @@ class NIRC2(AOInstrument):
     is_surrounded = is_surrounded>2
     return is_surrounded
 
- def saturated_pixels(self,image,header):
-    #Returns coordinates of all saturated pixels
-    #Uses image and header from file
-    threshold = 20000
+ def saturated_pixels(self,image,header, threshold=17500):
+    """Returns coordinates of all saturated pixels
+    Uses image (already corrected for nonlinearity) 
+    and header from file
+    
+    Parameters
+    ----------
+    image: numpy array
+        The input image
+
+    header: pyfits header
+        The header from this image.
+    """
     if "COADDS" in header.keys():
         pixels = np.where(image/header["COADDS"]>threshold)
     else:
@@ -718,30 +727,22 @@ class NIRC2(AOInstrument):
             in_fits = pyfits.open(ddir + in_files[i], ignore_missing_end=True)
         except:
             in_fits = pyfits.open(ddir + in_files[i] + '.gz', ignore_missing_end=True)
-        h = in_fits[0].header
+        hdr = in_fits[0].header
         in_fits.close()
-        pas[i]=360.+h['PARANG']+h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
-        raoffs[i]=h['RAOFF']
-        decoffs[i]=h['DECOFF']
-        decs[i] =h['DEC']
-	try:
-            im = pyfits.getdata(ddir + in_files[i])
-            hdr = pyfits.getheader(ddir + in_files[i])
-
-        except:
-            im = pyfits.getdata(ddir + in_files[i] + '.gz')
-            hdr = pyfits.getheader(ddir + in_files[i] + '.gz')
-	#im = pyfits.getdata(ddir + in_files[i])
+        pas[i]=360.+hdr['PARANG']+hdr['ROTPPOSN']-hdr['EL']-hdr['INSTANGL'] 
+        raoffs[i]=hdr['RAOFF']
+        decoffs[i]=hdr['DECOFF']
+        decs[i] =hdr['DEC']
         
-        saturation = self.saturated_pixels(im,hdr)
-        for ii in range(0,len(saturation[0])):
-            row = saturation[0][ii]
-            col = saturation[1][ii]
-            bad[max(0,row-1):row+2,max(0,col-1):col+2] = 1
-        surrounded = self.is_bad_surrounded(bad)
-        bad+=surrounded
         #Read in the image - making a nonlinearity correction
         im = self.linearize_nirc2(ddir + in_files[i])
+        
+        #Find saturated pixels and remove them.
+        saturation = self.saturated_pixels(im,hdr)
+        bad[saturation]=1
+        surrounded = self.is_bad_surrounded(bad)
+        bad+=surrounded
+        
         #Destripe, then clean the data using the dark and the flat. This might change
         #the background, so allow for this.
         backgrounds[i] = np.median(im)
