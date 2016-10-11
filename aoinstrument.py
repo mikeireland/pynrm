@@ -214,21 +214,26 @@ class AOInstrument:
     The image with bad pixel values optimally corrected.
     
     """
+    # fmask defines the null space of the image Fourier transform.
     wft = np.where(fmask)
+ 
+    # Where the bad pixel array is non-zero.
     w = np.where(bad)
-    badmat = np.zeros((len(w[0]),len(wft[0])),dtype='complex')
-    print("Bad matrix shape: " + str(badmat.shape))
 
-    #xy = np.meshgrid(2*np.pi*np.arange(im.shape[1]/2 + 1)/float(im.shape[1]),
-    #                2*np.pi*np.arange(im.shape[0])/float(im.shape[0]))
-    #Math should be correct here, but the bad pixel correction is still imaginary
+    # The bad matrix should map the bad pixels to the real and imaginary
+    # parts of the null space of the image Fourier transform
+    badmat = np.zeros((len(w[0]),len(wft[0])*2))
+    #print("Bad matrix shape: " + str(badmat.shape))
+
+    # Create a uv grid. Math should be correct here, but the second vector could be
+    # 2*np.pi*np.arange(im.shape[0])/float(im.shape[0]) and it would still work.
     xy = np.meshgrid(2*np.pi*np.arange(im.shape[1]//2 + 1)/float(im.shape[1]),
        2*np.pi*(((np.arange(im.shape[0]) + im.shape[0]//2) % im.shape[0]) - im.shape[0]//2)/float(im.shape[0]))
 
     for i in range(len(w[0])):
         # Avoiding the fft is marginally faster here...
         bft = np.exp(-1j*(w[0][i]*xy[1] + w[1][i]*xy[0]))
-        badmat[i,:] = bft[wft]
+        badmat[i,:] = np.append(bft[wft].real, bft[wft].imag)
 
     #A dodgy pseudo-inverse that needs an "invert" is faster than the la.pinv function
     #Unless things are really screwed, the matrix shouldn't be singular.
@@ -242,12 +247,10 @@ class AOInstrument:
 
     # Now compute the bad pixel corrections. (NB a sanity check here is
     # that the imaginary part really is 0)
-    addit = -np.real(np.dot(ftimz,ibadmat))
+    addit = -np.real(np.dot(np.append(ftimz.real, ftimz.imag),ibadmat))
 #    plt.clf()
 #    plt.plot(np.real(np.dot(ftimz,ibadmat)), np.imag(np.dot(ftimz,ibadmat)))
 #    raise UserWarning
-
-#    import pdb; pdb.set_trace()
 
     im[w] += addit
     return im
