@@ -635,7 +635,8 @@ class NIRC2(AOInstrument):
     
  def clean_dithered(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
-    manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1, subtract_median=False):
+    manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1, \
+    dodgy_badpix_speedup=False, subtract_median=False, extra_diagnostic_plots=False):
     """Clean a series of fits files, including: applying the dark and flat, removing bad pixels and
     cosmic rays, creating a `rough supersky' in order to find a mean image, identifying the target and any 
     secondary targets, identifying appropriate sky frames for each frame and subtracting these off. In
@@ -662,6 +663,9 @@ class NIRC2(AOInstrument):
     outfile: string,optional
         A filename to save the cube as, including the header of the first
         fits file in the cube plus extra information.
+    destripe: bool
+        Do we destripe the data? This is *bad* for thermal infrared (e.g. the L' filter)
+        TODO: Make this a default depending on filter.
     
     
     Returns
@@ -748,6 +752,7 @@ class NIRC2(AOInstrument):
         backgrounds[i] = np.median(im)
         im = self.destripe_nirc2(im, do_destripe=destripe, subtract_median=subtract_median)
         backgrounds[i] -= np.median(im)
+        
         #!!! It is debatable whether the dark on the next line is really useful... but setting 
         #dark_file='' removes its effect.
         im = (im - dark)/flat
@@ -835,6 +840,8 @@ class NIRC2(AOInstrument):
         im_filt = nd.filters.median_filter(subim,size=5)
         max_ix = np.unravel_index(im_filt.argmax(), im_filt.shape)
         maxs[i] = subim[max_ix[0],max_ix[1]]
+        
+        #subbad is the set of bad pixels in the sub-array.
         subbad = np.roll(np.roll(bad,subarr/2-ypeaks[i],axis=0),subarr/2-xpeaks[i],axis=1)
         subbad = subbad[0:subarr,0:subarr]
         new_bad = subbad.copy()    
@@ -845,19 +852,48 @@ class NIRC2(AOInstrument):
         plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
         for ntry in range(1,15):
-            #Correct the known bad pixels
-            self.fix_bad_pixels(subim,new_bad,fmask)
-            #Search for more bad pixels. Lets use a Fourier technique here...
+            # Correct the known bad pixels. Ideally, we self-consistently correct
+            # all bad pixels at once.
+            if dodgy_badpix_speedup:
+                self.fix_bad_pixels(subim,new_bad,fmask)
+            else:
+                self.fix_bad_pixels(subim,subbad,fmask)
+                         
+            # Search for more bad pixels. Lets use a Fourier technique here, where we
+            # take the inverse Fourier transform of the region of the image Fourier transform
+            # that is the null space of the MTF
             extra_bad_ft = np.fft.rfft2(subim)*fmask
-            extra_bad = np.real(np.fft.irfft2(extra_bad_ft))
+            bad_image = np.real(np.fft.irfft2(extra_bad_ft))
             mim = nd.filters.median_filter(subim,size=5)
-            #NB The next line *should* take experimentally determined readout noise into account !!!
-            extra_bad = np.abs(extra_bad/np.sqrt(np.maximum((backgrounds[i] + mim)/gain + rnoise**2,rnoise**2)))
-            unsharp_masked = extra_bad-nd.filters.median_filter(extra_bad,size=3)
-            current_threshold = np.max([0.3*np.max(unsharp_masked[new_bad == 0]), extra_threshold*np.median(extra_bad)])
-            extra_bad = unsharp_masked > current_threshold
+            
+            # NB The next line *should* take experimentally determined readout noise into account
+            # rather than a fixed readout noise!!!
+            total_noise = np.sqrt(np.maximum((backgrounds[i] + mim)/gain + rnoise**2,rnoise**2))
+            bad_image = bad_image/total_noise
+            
+            #In case of a single bad pixel, we end up with a ringing effect where the 
+            #surrounding pixels also look bad. So subtract a median filtered image.
+            unsharp_masked = bad_image-nd.filters.median_filter(bad_image,size=3)
+            
+            # The "extra_threshold" value for extra bad pixels is a scaling of the median 
+            # absolute deviation. We set a limit where new bad pixels can't have 
+            # absolute values morer than 0.2 times the peak bad pixel.
+            current_threshold = np.max([0.25*np.max(np.abs(unsharp_masked[new_bad == 0])), \
+                extra_threshold*np.median(np.abs(bad_image))])
+            extra_bad = np.abs(unsharp_masked) > current_threshold
             n_extra_bad = np.sum(extra_bad)
             print(str(n_extra_bad)+" extra bad pixels or cosmic rays identified. Attempt: "+str(ntry))
+            
+            #TESTING - too many bad pixels are identified in L' data, and noise isn't 
+            #consistent.
+            if extra_diagnostic_plots:
+                plt.clf()
+                plt.imshow(np.maximum(subim,0)**0.5, interpolation='nearest', cmap=cm.cubehelix)
+                new_bad_yx = np.where(new_bad)
+                plt.plot(new_bad_yx[1], new_bad_yx[0], 'wx')
+                plt.axis([0,128,0,128])
+                import pdb; pdb.set_trace()
+            
             subbad += extra_bad
             if (ntry == 1):
                 new_bad = extra_bad
@@ -866,6 +902,7 @@ class NIRC2(AOInstrument):
                 new_bad = extra_bad>0
             if (n_extra_bad == 0):
                 break
+        print(str(np.sum(subbad)) + " total bad pixels.")
         
         #Now re-correct both the known and new bad pixels at once.
         self.fix_bad_pixels(subim,subbad,fmask)
