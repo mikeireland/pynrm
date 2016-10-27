@@ -1,5 +1,6 @@
 """NIRC2 specific methods and variables for an AOInstrument.
 """
+from __future__ import division
 import astropy.io.fits as pyfits
 import numpy as np
 import scipy.ndimage as nd
@@ -181,23 +182,23 @@ class NIRC2(AOInstrument):
     try: inst=h['CURRINST']
     except: inst=''
     if (len(inst)==0):
-        print "Error: could not find instrument in header..."
+        print ("Error: could not find instrument in header...")
         raise UserWarning
     if ((self.instrument != inst) & (inst[0:3] != '###')):
-        print "Error: software expecting: ", self.instrument, " but instrument is: ", inst
+        print ("Error: software expecting: ", self.instrument, " but instrument is: ", inst)
         raise UserWarning
 
     try: fwo = h['FWONAME']
     except:
-        print "No FWONAME in NIRC2 header"
+        print ("No FWONAME in NIRC2 header")
         raise UserWarning
     try: fwi = h['FWINAME']
     except:
-        print "No FWINAME in NIRC2 header"
+        print ("No FWINAME in NIRC2 header")
         raise UserWarning
     try: slit = h['SLITNAME']
     except:
-        print "No SLITNAME in NIRC2 header"
+        print ("No SLITNAME in NIRC2 header")
         raise UserWarning
 
     if (fwi=='Kp'):
@@ -240,7 +241,7 @@ class NIRC2(AOInstrument):
         wave=1.5804e-6
         filter='Hcont'
     else:
-        print "Unknown Filter!"
+        print ("Unknown Filter!")
         pdb.set_trace()
     if (slit == 'none'):
         flat_file = 'flat_' + filter + '.fits'
@@ -249,12 +250,12 @@ class NIRC2(AOInstrument):
 
     try: camname = h['CAMNAME']
     except:
-           print "No CAMNAME in header"
+           print ("No CAMNAME in header")
     if (camname == 'narrow'):
         #This comes from the Yelda (2010) paper.
          rad_pixel = 0.009952*(np.pi/180.0/3600.0)
     else:
-        print "Unknown Camera!"
+        print ("Unknown Camera!")
         raise UserWarning
     #Estimate the expected readout noise directly from the header.
     if h['SAMPMODE'] == 2:
@@ -302,7 +303,7 @@ class NIRC2(AOInstrument):
     elif (fwi == '18holeMsk'):
         pupil_type = 'circ_nrm'
         pupil_params['mask'] = 'g18'
-        print "Still to figure out 18 hole mask..."
+        print ("Still to figure out 18 hole mask...")
         raise UserWarning
     else:
         pupil_type = 'keck'
@@ -362,19 +363,19 @@ class NIRC2(AOInstrument):
         The corrected image.
     """
     s = im.shape
-    quads = [im[0:s[0]/2,0:s[1]/2],im[s[0]:s[0]/2-1:-1,0:s[1]/2],
-             im[0:s[0]/2,s[1]:s[1]/2-1:-1],im[s[0]:s[0]/2-1:-1,s[1]:s[1]/2-1:-1]]
+    quads = [im[0:s[0]//2,0:s[1]//2],im[s[0]:s[0]//2-1:-1,0:s[1]//2],
+             im[0:s[0]//2,s[1]:s[1]//2-1:-1],im[s[0]:s[0]//2-1:-1,s[1]:s[1]//2-1:-1]]
     quads = np.array(quads, dtype='float')
     #Work through the quadrants, modifying based on the edges.
     if subtract_edge:
-        quads[1] += np.median(quads[3][:,s[1]/2-8:s[1]/2])- np.median(quads[1][:,s[1]/2-8:s[1]/2]) 
-        quads[2] += np.median(quads[3][s[0]/2-8:s[0]/2,:])- np.median(quads[2][s[0]/2-8:s[0]/2,:])  
-        delta = 0.5*(np.median(quads[3][s[0]/2-8:s[0]/2,:]) + np.median(quads[3][:,s[1]/2-8:s[1]/2])
-               - np.median(quads[0][s[0]/2-8:s[0]/2,:]) - np.median(quads[0][:,s[1]/2-8:s[1]/2]))
+        quads[1] += np.median(quads[3][:,s[1]//2-8:s[1]//2])- np.median(quads[1][:,s[1]//2-8:s[1]//2]) 
+        quads[2] += np.median(quads[3][s[0]//2-8:s[0]//2,:])- np.median(quads[2][s[0]//2-8:s[0]//2,:])  
+        delta = 0.5*(np.median(quads[3][s[0]//2-8:s[0]//2,:]) + np.median(quads[3][:,s[1]//2-8:s[1]//2])
+               - np.median(quads[0][s[0]//2-8:s[0]//2,:]) - np.median(quads[0][:,s[1]//2-8:s[1]//2]))
         quads[0] += delta
     #Subtract the background
     if subtract_median:
-        print "Subtracting Medians..."
+        print ("Subtracting Medians...")
         MED_DIFF_MULTIPLIER = 4.0
         for i in range(4):
             quad = quads[i,:,:]
@@ -384,18 +385,18 @@ class NIRC2(AOInstrument):
             med = np.median(quad[goodpix])
             quads[i,:,:] -= med
     if do_destripe:
-        quads = quads.reshape((4,s[0]/2,s[1]/16,8))
+        quads = quads.reshape((4,s[0]//2,s[1]//16,8))
         stripes = quads.copy()
         for i in range(4):
-            for j in range(s[0]/2): #The -1 on  line is because of artifacts
-                for k in range(s[0]/16):
+            for j in range(s[0]//2): #The -1 on  line is because of artifacts
+                for k in range(s[0]//16):
                     pix = np.array([stripes[(i+1)%4,j,k,:],stripes[(i+2)%4,j,k,:],stripes[(i+3)%4,j,k,:]])
                     quads[i,j,k,:] -= np.median(pix)
-        quads = quads.reshape((4,s[0]/2,s[1]/2))
-    im[0:s[0]/2,0:s[1]/2] = quads[0]
-    im[s[0]:s[0]/2-1:-1,0:s[1]/2] = quads[1]
-    im[0:s[0]/2,s[1]:s[1]/2-1:-1] = quads[2]
-    im[s[0]:s[0]/2-1:-1,s[1]:s[1]/2-1:-1] = quads[3]
+        quads = quads.reshape((4,s[0]//2,s[1]//2))
+    im[0:s[0]//2,0:s[1]//2] = quads[0]
+    im[s[0]:s[0]//2-1:-1,0:s[1]//2] = quads[1]
+    im[0:s[0]//2,s[1]:s[1]//2-1:-1] = quads[2]
+    im[s[0]:s[0]//2-1:-1,s[1]:s[1]//2-1:-1] = quads[3]
     return im
     
  def make_dark(self,in_files, out_file='', subtract_median=True, destripe=True, med_threshold=15.0, rdir=''):
@@ -427,7 +428,7 @@ class NIRC2(AOInstrument):
     VAR_THRESHOLD = 10.0
     nf = len(in_files)
     if (nf < 3):
-        print "At least 3 dark files sre needed for reliable statistics"
+        print ("At least 3 dark files sre needed for reliable statistics")
         raise UserWarning
     # Read in the first dark to check the dimensions.
     try:
@@ -438,7 +439,7 @@ class NIRC2(AOInstrument):
     instname = ''
     try: instname=h['CURRINST']
     except:
-        print "Unknown Header Type"
+        print ("Unknown Header Type")
     #Create the output filename if needed
     if (out_file == ''):
         out_file = self.get_dark_filename(h)
@@ -456,7 +457,7 @@ class NIRC2(AOInstrument):
             plt.imshow(np.minimum(adark,1e2))
         else:
             plt.imshow(adark)
-            print "Median: " + str(np.median(adark))
+            print ("Median: " + str(np.median(adark)))
         plt.draw()
         darks[i,:,:] = adark
     #Now look for weird pixels. 
@@ -469,12 +470,12 @@ class NIRC2(AOInstrument):
     var_dark /= nf-2
     #We need to threshold the med_diff quantity in case of low-noise, many subread images
     med_diff = np.maximum(np.median(np.abs(med_dark - np.median(med_dark))),1.0)
-    print "Median difference: " + str(med_diff)
+    print ("Median difference: " + str(med_diff))
     med_var_diff = np.median(np.abs(var_dark - np.median(var_dark)))
     bad_med = np.abs(med_dark - np.median(med_dark)) > med_threshold*med_diff
     bad_var = np.abs(var_dark) > np.median(var_dark) + VAR_THRESHOLD*med_var_diff
-    print "Pixels with bad mean: " + str(np.sum(bad_med))
-    print "Pixels with bad var: " + str(np.sum(bad_var))
+    print ("Pixels with bad mean: " + str(np.sum(bad_med)))
+    print ("Pixels with bad var: " + str(np.sum(bad_var)))
     bad = np.logical_or(bad_med, bad_var)
     med_dark[bad] = 0.0
     #Copy the original header to the dark file.
@@ -527,7 +528,7 @@ class NIRC2(AOInstrument):
     try:
         lindate = z['LINHIST']
     except:
-        print 'Linearizing: ',in_file
+        print ('Linearizing: ',in_file)
         xsub=z['NAXIS1']
         ysub=z['NAXIS2']
         norm=np.array((xsub,ysub))
@@ -576,9 +577,9 @@ class NIRC2(AOInstrument):
             else:
                 print("ERROR - no flat file!")
                 pdb.set_trace()
-        flat = flat[flat.shape[0]/2 - szy/2:flat.shape[0]/2 + szy/2,flat.shape[1]/2 - szx/2:flat.shape[1]/2 + szx/2]
+        flat = flat[flat.shape[0]//2 - szy//2:flat.shape[0]//2 + szy//2,flat.shape[1]//2 - szx//2:flat.shape[1]//2 + szx//2]
         bad = pyfits.getdata(rdir + flat_file,1)
-        bad = bad[bad.shape[0]/2 - szy/2:bad.shape[0]/2 + szy/2,bad.shape[1]/2 - szx/2:bad.shape[1]/2 + szx/2]
+        bad = bad[bad.shape[0]//2 - szy//2:bad.shape[0]//2 + szy//2,bad.shape[1]//2 - szx//2:bad.shape[1]//2 + szx//2]
     else:
         flat = np.ones((szy,szx))
         bad = np.zeros((szy,szx))
@@ -587,8 +588,8 @@ class NIRC2(AOInstrument):
             dark = pyfits.getdata(rdir + dark_file,0)
             if (szy != dark.shape[0]):
                 print("Warning - Dark is of the wrong shape!")
-                dark = dark[dark.shape[0]/2 - szy/2:dark.shape[0]/2 + szy/2, \
-                       dark.shape[1]/2 - szx/2:dark.shape[1]/2 + szx/2]
+                dark = dark[dark.shape[0]//2 - szy//2:dark.shape[0]//2 + szy//2, \
+                       dark.shape[1]//2 - szx//2:dark.shape[1]//2 + szx//2]
         except:
             print("*** Warning - Dark file {0:s} not found! Using zeros for dark ***".format(dark_file))
             dark = np.zeros((szy,szx))
@@ -818,16 +819,16 @@ class NIRC2(AOInstrument):
         for j in range(nf):
             im = full_cube[j,:,:]*flat
             #Roll all the sub-images, and cut them out.
-            subims[j,:,:] = np.roll(np.roll(im,subarr/2-ypeaks[i],axis=0),
-                subarr/2-xpeaks[i],axis=1)[0:subarr,0:subarr]
+            subims[j,:,:] = np.roll(np.roll(im,subarr//2-ypeaks[i],axis=0),
+                subarr//2-xpeaks[i],axis=1)[0:subarr,0:subarr]
         #Find a flat to re-apply
-        subflat = np.roll(np.roll(flat,subarr/2-ypeaks[i],axis=0),subarr/2-xpeaks[i],axis=1)
+        subflat = np.roll(np.roll(flat,subarr//2-ypeaks[i],axis=0),subarr//2-xpeaks[i],axis=1)
         subflat = subflat[0:subarr,0:subarr]
         #Find the frames that are appropriate for a dither...
         if (dither):
             w = np.where( (xpeaks - xpeaks[i])**2 + (ypeaks - ypeaks[i])**2 > 0.5*subarr**2 )[0]
             if len(w) == 0:
-                print "Error: Can not find sky from dithered data - use dither=False for {0:s}".format(in_files[0])
+                print ("Error: Can not find sky from dithered data - use dither=False for {0:s}".format(in_files[0]))
                 return
             #To avoid too many extra bad pixels, we'll use a median here.
             sky = np.median(subims[w,:,:], axis=0)
@@ -842,7 +843,7 @@ class NIRC2(AOInstrument):
         maxs[i] = subim[max_ix[0],max_ix[1]]
         
         #subbad is the set of bad pixels in the sub-array.
-        subbad = np.roll(np.roll(bad,subarr/2-ypeaks[i],axis=0),subarr/2-xpeaks[i],axis=1)
+        subbad = np.roll(np.roll(bad,subarr//2-ypeaks[i],axis=0),subarr//2-xpeaks[i],axis=1)
         subbad = subbad[0:subarr,0:subarr]
         new_bad = subbad.copy()    
         subim[np.where(subbad)] = 0
@@ -916,7 +917,7 @@ class NIRC2(AOInstrument):
     good = np.where(maxs > median_cut*np.median(maxs))
     good = good[0]
     if (len(good) < nf):
-        print nf-len(good), "  frames rejected due to low peak counts."
+        print (nf-len(good), "  frames rejected due to low peak counts.")
     cube = cube[good,:,:]
     nf = np.shape(cube)[0]
     #If a filename is given, save the file.

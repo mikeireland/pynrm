@@ -38,7 +38,7 @@ class PYPOISE():
             Co-ordinates defining the Fourier sampling.
         """
         if (pmask.shape[0] != pmask.shape[1]):
-            print "Error: Only a square pupil mask is allowed."
+            print ("Error: Only a square pupil mask is allowed.")
             raise UserWarning
         subarr = pmask.shape[0]
         #Transpose pmask so that we have the correct ordering of pixels
@@ -101,13 +101,13 @@ class PYPOISE():
         rad_pixel = hinfo['rad_pixel']
         if (len(dark_file) == 0):
             dark_file = hinfo['dark_file']
-        print "Using Dark file: ", dark_file
+        print ("Using Dark file: ", dark_file)
         if (len(flat_file) == 0):
             flat_file = hinfo['flat_file']
         #Fill in the filename...
         if (out_file == ''):
             out_file = hinfo['ftpix_file']
-        print "Using Flat file: ", flat_file
+        print ("Using Flat file: ", flat_file)
         #Short-hand
         p = hinfo['pupil_params']
     
@@ -217,7 +217,7 @@ class PYPOISE():
             badft = np.where( np.logical_or( np.abs(phases[ftpix]) > 2.5, \
                 np.logical_and(ps[ftpix]/RR[ftpix]**2/medrat < badpmask_threshold,ps[ftpix]/medps < lowps_threshold)) )
             badft = badft[0]        
-            print len(badft), " Fourier positions of low power identified"
+            print (len(badft), " Fourier positions of low power identified")
             nbadft = np.zeros(npsi)
             some_ones = np.ones(len(badft),dtype='int')
             for i in range(0,npsi):
@@ -225,7 +225,7 @@ class PYPOISE():
             badpmask = np.where(nbadft > nbad_threshold)[0]
             oldpmask = pmask.copy()
             pmask[ww[0][badpmask],ww[1][badpmask]] = 0
-            print len(badpmask), " low signal pupil positions eliminated."
+            print (len(badpmask), " low signal pupil positions eliminated.")
             #The next 2 lines are pretty useful for demonstrating how this works happens.
             plt.clf()
             plt.imshow(pmask + oldpmask,interpolation='nearest')
@@ -364,7 +364,7 @@ class PYPOISE():
             if len(ptok_file)==0:
                 ptok_file = hinfo['ftpix_file']
         if (len(cube.shape) != 3):
-            print "Error: cube doesn't have 3 dimensions! specify cube or cube_file"
+            print ("Error: cube doesn't have 3 dimensions! specify cube or cube_file")
             raise UserWarning
 
         #Input the kernel-phase extraction parameters. By default, we get this from 
@@ -385,13 +385,13 @@ class PYPOISE():
                 ptok = pyfits.getdata(ptok_file_full,2)
         #Now some double-checking that we have all our variables.
         if (len(ptok.shape) != 2):
-            print "Error: pupil to kerphase matrix doesn't have 2 dimensions! specify ftpix_file or ptok"
+            print ("Error: pupil to kerphase matrix doesn't have 2 dimensions! specify ftpix_file or ptok")
             raise UserWarning
         if (len(ftpix[0]) == 0):
-            print "Error: no Fourier pixels specified! Specify ftpix or ptok_file"
+            print ("Error: no Fourier pixels specified! Specify ftpix or ptok_file")
             raise UserWarning
         if (len(fmask) == 0):
-            print "Error: no Fourier zero mask specified! Specify fmask or ptok_file"
+            print ("Error: no Fourier zero mask specified! Specify fmask or ptok_file")
             raise UserWarning
         #Extract the POISE variables if needed
         if (use_poise):
@@ -403,7 +403,7 @@ class PYPOISE():
                     ps_systematic = pyfits.getdata(ptok_file_full, 6)
                     cal_ps = pyfits.getdata(ptok_file_full,7)
             if (len(systematic) == 0):
-                print "Error: systematic error component must be input if use_poise is set"
+                print ("Error: systematic error component must be input if use_poise is set")
                 return UserWarning
         #Put ftpix into the appropriate tuple format.
         ftpix = (ftpix[0],ftpix[1])
@@ -586,7 +586,7 @@ class PYPOISE():
         #Hopefully, the ptok variables are stored as part of the kp_file.
         ptok_file = hkp['PTOKFILE']
         if len(ptok_file) > 0:
-            print "Extracting ptok and other variables from file"
+            print ("Extracting ptok and other variables from file")
             ftpix = pyfits.getdata(rdir + ptok_file,0)
             fmask = pyfits.getdata(rdir + ptok_file,1)
             ptok = pyfits.getdata(rdir + ptok_file,2)
@@ -596,12 +596,12 @@ class PYPOISE():
         
         #Let's sanity-check
         if len(ptok.shape) != 2:
-            print "Error: no valid ptok matrix. ptok or a kp_file with embedded ptok fits filename must be input."
+            print ("Error: no valid ptok matrix. ptok or a kp_file with embedded ptok fits filename must be input.")
             return UserWarning
         npsi = ptok.shape[0]
         nphi = ptok.shape[1]
         if len(fmask) == 0:
-            print "Error: A Fourier-plane mask fmask must set or embedded in the ptok fits file."
+            print ("Error: A Fourier-plane mask fmask must set or embedded in the ptok fits file.")
             return UserWarning
         ftpix = (ftpix[0],ftpix[1])
         ncubes = len(kp_files)
@@ -662,13 +662,13 @@ class PYPOISE():
         plt.show()
         print('Num Kernel-phases rejected for calibration: ' + str(len(bad)))
         print('Num Good Kernel-phases: ' + str(len(good)))
-        print V.shape
-        print ptok.shape
+        print (V.shape)
+        print (ptok.shape)
         ptok_poise = np.dot(np.transpose(V),ptok)
         #Show the Fourier response of the rejected kernel-phases
         if len(ftpix)>0:
             for i in range(len(bad)):
-                print "Click for next figure..."
+                print ("Click for next figure...")
                 dummy = plt.ginput(1)
                 ysz = np.max(ftpix[0])+1
                 xsz= np.max(ftpix[1])+1
@@ -770,12 +770,12 @@ class PYPOISE():
             plt.show()
             print('Num Power Spectrum combinations rejected for calibration: ' + str(len(bad)))
             print('Num Good Power Spectrum combinations: ' + str(len(good)))
-            print V.shape
-            print ps_proj_matrix.shape
+            print (V.shape)
+            print (ps_proj_matrix.shape)
             #Show the Fourier response of the rejected power spectra
             if len(ftpix)>0:
                 for i in range(len(bad)):
-                    print "Click for next figure..."
+                    print ("Click for next figure...")
                     dummy = plt.ginput(1)
                     ysz = np.max(ftpix[0])+1
                     xsz= np.max(ftpix[1])+1
@@ -799,7 +799,7 @@ class PYPOISE():
         #If a savefile name is given, save the file!
         if (len(out_file) > 0):
             if (rad_pixel == 0):
-                print "Missing rad_pixel variable!"
+                print ("Missing rad_pixel variable!")
                 return UserWarning
             hl = pyfits.HDUList()
             header = pyfits.Header()
@@ -863,7 +863,7 @@ class PYPOISE():
             # It makes imaging easy, as where each measurement came from is
             # abstracted.
             all_data = np.array([kp_mn,kp_sig])
-            print all_data.shape
+            print (all_data.shape)
         if os.path.isfile(cdir + ptok_file):
             ptok_file_full = cdir + ptok_file
         else:
@@ -1000,9 +1000,9 @@ class PYPOISE():
         modified_chi2[rr > maxrad] = np.max(modified_chi2)
         min_ix = np.unravel_index(modified_chi2.argmin(), modified_chi2.shape)
         best_rchi2 = chi2[min_ix[0], min_ix[1]]/(len(kp_sig) - 3)
-        print "Minimum reduced chi2: ", best_rchi2
-        print "Significance (in sigma): ", crat[min_ix[0], min_ix[1]]/crat_sig[min_ix[0], min_ix[1]]
-        print "Significance (scaling by sqrt(chi2)): ", crat[min_ix[0], min_ix[1]]/crat_sig[min_ix[0], min_ix[1]]/np.sqrt(best_rchi2)
+        print ("Minimum reduced chi2: ", best_rchi2)
+        print ("Significance (in sigma): ", crat[min_ix[0], min_ix[1]]/crat_sig[min_ix[0], min_ix[1]])
+        print ("Significance (scaling by sqrt(chi2)): ", crat[min_ix[0], min_ix[1]]/crat_sig[min_ix[0], min_ix[1]]/np.sqrt(best_rchi2))
 
         sep = pxscale*np.sqrt((min_ix[1]-sz/2)**2 + (min_ix[0]-sz/2)**2)
         pa = np.degrees(np.arctan2( -(min_ix[1]-sz/2), min_ix[0]-sz/2))
@@ -1026,7 +1026,7 @@ class PYPOISE():
         plt.text(-0.45*sz*pxscale, -0.3*sz*pxscale,'N')
         plt.text(-0.3*sz*pxscale,-0.45*sz*pxscale, 'E')
         plt.draw()
-        print "sep, pa, contrast, sig: ", sep, pa, contrast, crat_sig[min_ix[0], min_ix[1]]
+        print ("sep, pa, contrast, sig: ", sep, pa, contrast, crat_sig[min_ix[0], min_ix[1]])
         return (sep,pa,contrast), crat, crat_sig, chi2, best_rchi2
 
     def kp_binary_fitfunc_onefile(self,p, rad_pixel, subarr, ftpix, ptok, kp_mn, kp_sig):
@@ -1149,12 +1149,12 @@ class PYPOISE():
             p[0][1] = (p[0][1] + 180) % 360
         #, factor = factorTry, diag = diagTry, maxfev = maxfev)
         ndf = len(p[2]['fvec'])
-        print "Initial Chi^2: ", np.sum(initial_resid**2)/(ndf-3)
+        print ("Initial Chi^2: ", np.sum(initial_resid**2)/(ndf-3))
         rchi2 = np.sum(p[2]['fvec']**2)/(ndf-3)
-        print "Best Reduced Chi^2: ", rchi2
-        print "Parameters: {0:6.1f} {1:7.2f} {2:6.2f}".format(p[0][0], p[0][1], -2.5*np.log10(p[0][2]))
+        print ("Best Reduced Chi^2: ", rchi2)
+        print ("Parameters: {0:6.1f} {1:7.2f} {2:6.2f}".format(p[0][0], p[0][1], -2.5*np.log10(p[0][2])))
         errs = np.sqrt(np.diag(p[1])*rchi2)
-        print "Errors:     {0:6.1f} {1:7.2f} {2:6.2f}".format(errs[0], errs[1], 2.5*np.log10(np.e)*errs[2]/p[0][2])
+        print ("Errors:     {0:6.1f} {1:7.2f} {2:6.2f}".format(errs[0], errs[1], 2.5*np.log10(np.e)*errs[2]/p[0][2]))
         return p[0], errs, p[1]*rchi2        
 
     def process_block(self, fstart='', fend='', min_files=3, dither=True, add_noise=50):
@@ -1391,10 +1391,10 @@ if (0):
     summary_file = 'poise_FPTau.fits'
     implane_file = 'FPTau_implane.fits'
     pgrid, crat, crat_sig, chi2 = pp.implane_fit_binary(implane_file, summary_file=summary_file, to_sky_pa=False)
-    print "Grid Fit: ", pgrid
+    print ("Grid Fit: ", pgrid)
     pgrid = np.array(pgrid)
     if (pgrid[2] > 0.5):
-        print "Contrast too high to use kerphase for fitting (i.e. near-equal binary)."
+        print ("Contrast too high to use kerphase for fitting (i.e. near-equal binary).")
     else:
         p = pp.kp_binary_fit([summary_file],pgrid)
     
