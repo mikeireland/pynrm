@@ -240,6 +240,12 @@ class NIRC2(AOInstrument):
     elif (fwo=='Hcont'):
         wave=1.5804e-6
         filter='Hcont'
+    elif (fwo=='Br_alpha'):
+        wave=4.052e-6
+        filter='Br_alpha'
+    elif (fwo=='Bra_cont'):
+        wave=3.987e-6
+        filter='Bra_cont'
     else:
         print ("Unknown Filter!")
         pdb.set_trace()
@@ -458,7 +464,8 @@ class NIRC2(AOInstrument):
         else:
             plt.imshow(adark)
             print ("Median: " + str(np.median(adark)))
-        plt.draw()
+        plt.pause(0.001)
+        #plt.draw()
         darks[i,:,:] = adark
     #Now look for weird pixels. 
     med_dark = np.median(darks, axis=0)
@@ -489,7 +496,8 @@ class NIRC2(AOInstrument):
     plt.figure(2)
     plt.imshow(bad,cmap=cm.gray, interpolation='nearest')
     plt.title('Bad Pixels')
-    plt.draw()
+    plt.pause(0.001)
+    #plt.draw()
 
  def linearize_nirc2(self,in_file, out_file=''):
     """Procedure to linearize NIRC2 (treated as a single detector).
@@ -528,7 +536,7 @@ class NIRC2(AOInstrument):
     try:
         lindate = z['LINHIST']
     except:
-        print ('Linearizing: ',in_file)
+        print('Linearizing: ' + in_file)
         xsub=z['NAXIS1']
         ysub=z['NAXIS2']
         norm=np.array((xsub,ysub))
@@ -803,7 +811,8 @@ class NIRC2(AOInstrument):
         max_ix = np.unravel_index(im_filt.argmax(), im_filt.shape)
         plt.title('Identified target shown')
     plt.plot(max_ix[1], max_ix[0], 'wx', markersize=20,markeredgewidth=2)
-    plt.draw()
+    plt.pause(0.001)
+    #plt.draw()
     print("Maximum x,y: " + str(max_ix[1])+', '+ str(max_ix[0]))
     time.sleep(show_wait)
 
@@ -850,7 +859,8 @@ class NIRC2(AOInstrument):
         plt.clf()
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
         plt.title(hinfo['targname']) 
-        plt.draw()
+        plt.pause(0.001)
+        #plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
         for ntry in range(1,15):
             # Correct the known bad pixels. Ideally, we self-consistently correct
@@ -908,7 +918,8 @@ class NIRC2(AOInstrument):
         #Now re-correct both the known and new bad pixels at once.
         self.fix_bad_pixels(subim,subbad,fmask)
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.draw()
+        plt.pause(0.001)
+        #plt.draw()
         
         #Save the data and move on!
         cube[i,:,:]=subim
