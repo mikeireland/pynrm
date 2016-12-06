@@ -61,7 +61,7 @@ colheads=colheads+keys+operations
 # Begin main part of the script
 ########################
 
-popCSV.popCSV(keys,operations,colheads,path,outfile,textfile=textfile,blockkeys=blockkeys)
+popCSV.popCSV(keys,operations,colheads,path,outfile,textfile=textfile,blockkeys=blockkeys,total_int_keys=["COADDS","ITIME"])
 
 
 print('CSV generation finished at time:')

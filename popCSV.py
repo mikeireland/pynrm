@@ -1,3 +1,9 @@
+"""Notes:
+This should additionally have the total integration time for the scan.
+
+Also - a counter for the number fo visits in a night for 1 target.
+"""
+
 import numpy as np
 import pbclass, os
 try:
@@ -12,7 +18,7 @@ last_fnum = 0
 last_block_string = ""
 last_name=""
 
-def write_textfile(g, block_string, name,f_ix,fnum_prefix="",add_filename=False):
+def write_textfile(g, block_string, name,f_ix,fnum_prefix="",add_filename=False,total_int=None):
     global last_fnum
     global last_block_string
     global last_name
@@ -28,20 +34,25 @@ def write_textfile(g, block_string, name,f_ix,fnum_prefix="",add_filename=False)
         last_name=name
         return
     if add_filename:
-        g.write(numstr+last_block_string + ' ' + last_name + '\n')    
+        g.write(numstr+last_block_string + ' ' + last_name)    
     else:
-        g.write(numstr+last_block_string + '\n')
+        g.write(numstr+last_block_string)
+    if total_int:
+        g.write("{0:5.1f}".format((current_fnum-last_fnum)*total_int)+'\n')
+    else:
+        g.write('\n')
     last_fnum = current_fnum
     last_name = name
     last_block_string=block_string
 
-def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],threshold=20000,fnum_prefix="n",add_filename=False):
+def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],threshold=20000,fnum_prefix="n",add_filename=False,total_int_keys=None):
     """Populate a CSV file containing information about the fits headers
     
     Parameters
     ----------
     threshold: int
         The threshold before the file is considered saturated"""
+    total_int=None
     if ( (len(textfile)>0) & (len(blockkeys)>0) ):
         try:
             g=open(textfile,'w')
@@ -132,11 +143,15 @@ def popCSV(keys,operations,colheads,path,outfile,textfile='',blockkeys=[],thresh
                     f.write(line)
                     
                     #Now write our block text file...
+                    if total_int_keys:
+                        total_int=1
+                        for akey in total_int_keys:
+                            total_int *= prihdr[akey]
                     if textfile_open:
-                        write_textfile(g, block_string, name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename)
+                        write_textfile(g, block_string, name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename,total_int=total_int)
                 
                 j+=1
                 pb.progress(j)
-            write_textfile(g, "", name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename)
+            write_textfile(g, "", name,f_ix,fnum_prefix=fnum_prefix,add_filename=add_filename,total_int=total_int)
         return 1
 
