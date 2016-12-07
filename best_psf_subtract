@@ -42,7 +42,8 @@ plt.imshow(nd.rotate(subim_sum, -np.mean(tgt.pas), reshape=False)[::-1,:])
 #We want to compute: \Sum (subims[i] * shift(best_fit_ims[i])) for 
 #every possible shift value in 2D. This is just a cross-correlation!
 #We can use the power of numpy by putting this in a single line.
-crats = np.fft.fftshift(np.fft.irfft2(np.fft.rfft2(subims) * np.conj(np.fft.rfft2(best_fit_ims))), axes=[1,2])
+#We are computing best_fit_ims [cross-correlation *] subims
+crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(best_fit_ims)) * np.fft.rfft2(subims) ), axes=[1,2])
 
 #Now rotate and normalise
 for i in range(len(crats)):

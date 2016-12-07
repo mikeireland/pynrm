@@ -32,6 +32,7 @@ cal_ims = []
 
 #Reject target data
 bintab = []
+header = pyfits.getheader(dir + tgt_cubes[0])
 for fname in tgt_cubes:
     dd = pyfits.getdata(dir + fname)
     newtab = pyfits.getdata(dir + fname,1)
@@ -64,7 +65,7 @@ tgt_ims = np.array(tgt_ims)
 cal_ims = np.array(cal_ims)
 
 #Now save the file!
-hdu1 = pyfits.PrimaryHDU(tgt_ims)
+hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
 hdu2 = pyfits.ImageHDU(cal_ims)
 hdu3 = pyfits.BinTableHDU(bintab)
 hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
