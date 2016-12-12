@@ -682,6 +682,7 @@ class NIRC2(AOInstrument):
     #Allocate memory for the cube
     nf = len(in_files)
     cube = np.zeros((nf,subarr,subarr))
+    bad_cube = np.zeros((nf,subarr,subarr), dtype=np.int8)
     #Decide on the image size from the first file. !!! are x and y around the right way?
     try:
         in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
@@ -910,7 +911,9 @@ class NIRC2(AOInstrument):
         plt.draw()
         
         #Save the data and move on!
-        cube[i,:,:]=subim
+        cube[i]=subim
+        subbad = subbad>0
+        bad_cube[i]=subbad.astype(np.int8)
         
     #Find bad frames based on low peak count.
     good = np.where(maxs > median_cut*np.median(maxs))
@@ -942,6 +945,7 @@ class NIRC2(AOInstrument):
         col5 = pyfits.Column(name='background', format='E', array=backgrounds)
         cols = pyfits.ColDefs([col1, col2,col3,col4,col5])
         hl.append(pyfits.new_table(cols))
+        hl.append(pyfits.ImageHDU(bad_cube))
         hl.writeto(cdir+out_file,clobber=True)
     return cube
     
