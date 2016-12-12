@@ -32,7 +32,7 @@ class AOInstrument:
     try:
         f = open(ddir + filename)
     except:
-        print "Error: file doesn't exist " + ddir + filename
+        print ("Error: file doesn't exist " + ddir + filename)
         raise UserWarning
     r = csv.DictReader(f, delimiter=',')
     #Read first line to initiate the dictionary
@@ -117,16 +117,16 @@ class AOInstrument:
     """
     try: filter = h['FILTER']
     except:
-        print "No FILTER in header"
+        print ("No FILTER in header")
     try: wave = h['WAVE']
     except:
-        print "No WAVE in header"    
+        print ("No WAVE in header")    
     try: rad_pix = h['RAD_PIX']
     except:
-        print "No RAD_PIX in header"
+        print ("No RAD_PIX in header")
     try: targname = h['TARGET']
     except:
-        print "No TARGET in header"
+        print ("No TARGET in header")
     return {'dark_file':'dark.fits', 'flat_file':'flat.fits', 'filter':filter, 
         'wave':wave, 'rad_pixel':rad_pixel,'targname':targname,'pupil_type':'circ','pupil_params':dict()}
         

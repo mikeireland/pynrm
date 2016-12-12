@@ -9,6 +9,7 @@ from __future__ import print_function, division
 
 import astropy.io.fits as pyfits
 import numpy as np
+import sys
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pdb
@@ -17,16 +18,20 @@ import opticstools as ot
 plt.ion()
 
 #Inputs here...
-dir = '/Users/mireland/tel/nirc2/redux/IRS48/'
-filename = dir + 'good_ims.fits'
+"""dir = '/Users/mireland/tel/nirc2/redux/IRS48/'
+filename = dir + 'good_ims.fits'"""
 pa = 317.4 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
-radec = [246.9049584,-23.49026944]
-
-radec = [276.124,-29.780]
-radec = [15*(18 + 24/60. + 29.76/3600.),-29 - 46/60. - 47.7/3600]
-dir = '/Users/mireland/tel/nirc2/redux/HD169142/2014/'
-filename = dir + 'good_ims.fits'
-pa = 337.5 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
+#radec = [246.9049584,-23.49026944]
+#radec = [276.124,-29.780]
+#radec = [15*(18 + 24/60. + 29.76/3600.),-29 - 46/60. - 47.7/3600]
+if len(sys.argv)<3:
+    print("Useage: rl_deconv.py image_file calibration_star_file")
+    sys.exit()
+filename = sys.argv[1]
+cal_file = sys.argv[2]
+header = pyfits.getheader(filename)
+radec = [header['RA'],header['DEC']]
+pa = np.mean(pyfits.getdata(filename,1)['pa'])
 
 #dir = '/Users/mireland/tel/nirc2/redux/HD169142/2016/'
 #filename = dir + 'good_ims.fits'
@@ -38,17 +43,18 @@ subtract_median=True
 #model
 niter = 50
 tgt_ims = pyfits.getdata(filename)
-cal_ims = pyfits.getdata(filename,1)
-
+cal_ims = pyfits.getdata(cal_file)
 sz = tgt_ims.shape[1]
 best_models = np.zeros( tgt_ims.shape )
 best_rms = np.zeros( tgt_ims.shape[0] )
 
 if subtract_median:
     for i in range(len(cal_ims)):
-        cal_ims[i] -= np.median(cal_ims[i])
+        for j in range(len(cal_ims[i])):
+            cal_ims[i][j] -= np.median(cal_ims[i])
     for i in range(len(tgt_ims)):
-        tgt_ims[i] -= np.median(tgt_ims[i])
+        for j in range(len(tgt_ims[i])):
+            tgt_ims[i][j] -= np.median(tgt_ims[i])
 
 #Loop through all target images, and make the best deconvolution possible for each image.
 for i in range(tgt_ims.shape[0]):
@@ -153,7 +159,6 @@ fig3 = aplpy.FITSFigure('deconv_image.fits')
 fig3.show_colorscale(cmap=cm.cubehelix, stretch='linear',vmax=1, vmin=0.0)
 fig3.add_colorbar()
 fig3.add_grid()
-
 plt.figure(1)
 plt.clf()
 rr, ii = ot.azimuthalAverage(image,returnradii=True,center=[64,64],binsize=0.7)
