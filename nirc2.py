@@ -691,7 +691,7 @@ class NIRC2(AOInstrument):
     #Allocate memory for the cube
     nf = len(in_files)
     cube = np.zeros((nf,subarr,subarr))
-    bad_cube = np.zeros((nf,subarr,subarr), dtype=np.int8)
+    bad_cube = np.zeros((nf,subarr,subarr), dtype=np.uint8)
     #Decide on the image size from the first file. !!! are x and y around the right way?
     try:
         in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
@@ -825,8 +825,10 @@ class NIRC2(AOInstrument):
     subims = np.empty( (nf,subarr,subarr) )
     #Sky subtract and fix bad pixels.
     for i in range(nf):
-        #Undo the flat, to minimise the effects of errors in the flat.
+        #For each frame, cut out a sub-image centered on this particular (x,y) location
+        #corresponding to frame i. 
         for j in range(nf):
+            #Undo the flat, to minimise the effects of errors in the flat.
             im = full_cube[j,:,:]*flat
             #Roll all the sub-images, and cut them out.
             subims[j,:,:] = np.roll(np.roll(im,subarr//2-ypeaks[i],axis=0),
@@ -861,6 +863,7 @@ class NIRC2(AOInstrument):
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
         plt.title(hinfo['targname']) 
         plt.pause(0.001)
+        #import pdb; pdb.set_trace()
         #plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
         for ntry in range(1,15):
@@ -925,7 +928,7 @@ class NIRC2(AOInstrument):
         #Save the data and move on!
         cube[i]=subim
         subbad = subbad>0
-        bad_cube[i]=subbad.astype(np.int8)
+        bad_cube[i]=subbad.astype(np.uint8)
         
     #Find bad frames based on low peak count.
     good = np.where(maxs > median_cut*np.median(maxs))
