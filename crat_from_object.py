@@ -2,7 +2,7 @@ import os,sys,os.path,numpy
 import contratio
 nameList = sys.argv[4:len(sys.argv)]
 if len(sys.argv)<3:
-    print('Useage: choose_object.py raw_directory cube_directory plot_directory object_name (with spaces)')
+    print('Useage: crat_from_object.py raw_directory cube_directory plot_directory object_name (with spaces)')
     sys.exit()
 #Combine name into single string
 name = ''
@@ -24,7 +24,7 @@ for line in infoFile:
     if ii==1:
         continue
     entry = line.split(' ')
-    if name in line:
+    if name in line and os.path.isfile(cubeDir+'/cube'+entry[0]+'.fits'):
         elements.append(int(entry[0]))
         lineNums.append(ii)
     all_elements.append(int(entry[0]))
