@@ -18,6 +18,7 @@ elements = []
 ii = 0
 lineNums = []
 all_elements = []
+cubeDir = sys.argv[2]
 #Find line and frame numbers where the name appears
 for line in infoFile:
     ii+=1
@@ -28,7 +29,6 @@ for line in infoFile:
         elements.append(int(entry[0]))
         lineNums.append(ii)
     all_elements.append(int(entry[0]))
-cubeDir = sys.argv[2]
 cal_els = []
 tgt_cubes = []
 cal_cubes = []
