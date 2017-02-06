@@ -159,5 +159,4 @@ class CONTRATIO():
         hdu.header['CTYPE2']='DEC--TAN'
         hdu.header['OBJECT']=oldHeader['OBJECT']
         
-        #hdulist = pyfits.HDUList([hdu])
         hdu.writeto(plotDir+'/crats_'+objName+'.fits',clobber=True)
