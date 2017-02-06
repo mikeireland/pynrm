@@ -62,10 +62,10 @@ for kk in range(0,len(elements)):
 #Create list of calibrator cubes
 for ii in range(0,len(cal_els)):
     cal_cubes.append(cubeDir+'/cube'+str(cal_els[ii])+'.fits')
-print (tgt_cubes)
+
 crat = contratio.CONTRATIO()
 #Reject bad images
-good_ims = crat.choose_psfs(tgt_cubes,cal_cubes)
+good_ims = crat.choose_psfs(tgt_cubes,cal_cubes,plotDir)
 #Find best psf for each target image and find contrast ratio
 crat.best_psf_subtract(good_ims,plotDir)
 
