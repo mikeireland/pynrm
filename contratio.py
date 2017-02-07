@@ -10,9 +10,9 @@ class CONTRATIO():
         #Remove Spaces From Object Name
         objNoSpaces = objName.split(' ')
         objName = ''.join(objNoSpaces)
-        outfile = 'good_ims_'+objName+'.fits'			
+        outfile = 'good_ims_'+objName+'.fits'
         REJECT_COLUMN = 20
-        
+        header = pyfits.getheader(tgt_cubes[0])
         tgt_ims = []
         cal_ims = []
         
@@ -55,8 +55,9 @@ class CONTRATIO():
         hdu2 = pyfits.ImageHDU(cal_ims)
         hdu3 = pyfits.BinTableHDU(bintab)
         hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
+
         hdulist.writeto(save_dir+'/'+outfile, clobber=True)
-        return outfile
+        return save_dir+'/'+outfile
     
     def best_psf_subtract(self,filename,plotDir):
         #Create our target model and object model.
