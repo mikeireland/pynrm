@@ -4,160 +4,129 @@ import matplotlib.pyplot as plt
 import os,sys
 import psf_marginalise as pm
 import scipy.ndimage as nd
-class CONTRATIO():
-    def choose_psfs(self,tgt_cubes,cal_cubes,save_dir):
-        objName = pyfits.getheader(tgt_cubes[0])['OBJECT']
-        #Remove Spaces From Object Name
-        objNoSpaces = objName.split(' ')
-        objName = ''.join(objNoSpaces)
-        outfile = 'good_ims_'+objName+'.fits'
-        REJECT_COLUMN = 20
-        header = pyfits.getheader(tgt_cubes[0])
-        tgt_ims = []
-        cal_ims = []
-        
-        #Reject target data
-        bintab = []
-        header = pyfits.getheader(tgt_cubes[0])
-        for fname in tgt_cubes:
-            dd = pyfits.getdata(fname)
-            newtab = pyfits.getdata(fname,1)
-            for i in range(dd.shape[0]):
-                plt.clf()
-                plt.imshow(dd[i,:,:], interpolation='nearest')
-                xy = plt.ginput(1)
-                if (xy[0][0] > REJECT_COLUMN):
-                    tgt_ims.append(dd[i,:,:])
-                    if len(bintab):
-                        bintab = np.append(bintab, newtab[i:i+1])
-                    else:
-                        bintab =  newtab[i:i+1]
-                else:
-                    print("Frame Rejected!")
-                    
-        #Reject calibrator data            
-        for fname in cal_cubes:
-            dd = pyfits.getdata(fname)
-            for i in range(dd.shape[0]):
-                plt.clf()
-                plt.imshow(dd[i,:,:], interpolation='nearest')
-                xy = plt.ginput(1)
-                if (xy[0][0] > REJECT_COLUMN):
-                    cal_ims.append(dd[i,:,:])
-                else:
-                    print("Frame Rejected!")
-        
-        tgt_ims = np.array(tgt_ims)
-        cal_ims = np.array(cal_ims)
-        
-        #Now save the file!
-        hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
-        hdu2 = pyfits.ImageHDU(cal_ims)
-        hdu3 = pyfits.BinTableHDU(bintab)
-        hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
-
-        hdulist.writeto(save_dir+'/'+outfile, clobber=True)
-        return save_dir+'/'+outfile
+def choose_psfs(tgt_cubes,cal_cubes,save_dir):
+    objName = pyfits.getheader(tgt_cubes[0])['OBJECT']
+    #Remove Spaces From Object Name
+    objNoSpaces = objName.split(' ')
+    objName = ''.join(objNoSpaces)
+    outfile = 'good_ims_'+objName+'.fits'
+    REJECT_COLUMN = 20
+    header = pyfits.getheader(tgt_cubes[0])
+    tgt_ims = []
+    cal_ims = []
     
-    def best_psf_subtract(self,filename,plotDir):
-        #Create our target model and object model.
-        psfs = pm.Psfs(cubefile=filename)
-        object_model = pm.PtsrcObject()
-        tgt = pm.Target(psfs, object_model, cubefile=filename)
-
-        best_ixs, best_fit_ims = tgt.find_best_psfs([])
-        objName = pyfits.getheader(filename)['OBJECT']
-        #Remove Spaces From Object Name
-        objNoSpaces = objName.split(' ')
-        objName = ''.join(objNoSpaces)
-        imageBreaks = []
-        #Find where position angle drastically changes implying long gap between images
-        #Divide into blocks
-        for ii in range(0,len(tgt.pas)):
-            if ii>0:
-                if abs(tgt.pas[ii]-tgt.pas[ii-1])>3:
-                    imageBreaks.append(ii)
-        if len(imageBreaks)==0:
-            tgt_ims = [tgt.ims]
-            best_ims = [best_fit_ims]
-            tgt_pas = [tgt.pas]
-        else:
-            tgt_ims = []
-            best_ims = []
-            tgt_pas = []
-            for ii in range(0,len(imageBreaks)+1):
-                if ii==0:
-                    tgt_ims.append(tgt.ims[0:imageBreaks[ii]])
-                    best_ims.append(best_fit_ims[0:imageBreaks[ii]])
-                    tgt_pas.append(tgt.pas[0:imageBreaks[ii]])
-                elif ii==len(imageBreaks):
-                    tgt_ims.append(tgt.ims[imageBreaks[ii-1]:len(tgt.ims)])
-                    best_ims.append(best_fit_ims[imageBreaks[ii-1]:len(best_fit_ims)])
-                    tgt_pas.append(tgt.pas[imageBreaks[ii-1]:len(tgt.pas)])
+    #Reject target data
+    bintab = []
+    header = pyfits.getheader(tgt_cubes[0])
+    for fname in tgt_cubes:
+        dd = pyfits.getdata(fname)
+        newtab = pyfits.getdata(fname,1)
+        for i in range(dd.shape[0]):
+            plt.clf()
+            plt.imshow(dd[i,:,:], interpolation='nearest')
+            xy = plt.ginput(1)
+            if (xy[0][0] > REJECT_COLUMN):
+                tgt_ims.append(dd[i,:,:])
+                if len(bintab):
+                    bintab = np.append(bintab, newtab[i:i+1])
                 else:
-                    tgt_ims.append(tgt.ims[imageBreaks[ii-1]:imageBreaks[ii]])
-                    best_ims.append(best_fit_ims[imageBreaks[ii-1]:imageBreaks[ii]])
-                    tgt_pas.append(tgt.pas[imageBreaks[ii-1]:imageBreaks[ii]])
-        
-        all_crats = []
-        for jj in range(0,len(imageBreaks)+1):
-            #Subtracted image - oriented so that N is up and E is left.
-            if len(imageBreaks)==0:
-                imageNum = ''
+                    bintab =  newtab[i:i+1]
             else:
-                imageNum = '_Img'+str(jj+1)
-            subims = tgt_ims[jj] - best_ims[jj]
-            subim_sum = np.sum(subims, axis=0) 
-            plt.figure(1)
+                print("Frame Rejected!")
+                
+    #Reject calibrator data
+    cal_objects = []            
+    for fname in cal_cubes:
+        dd = pyfits.getdata(fname)
+        cal = pyfits.getheader(fname)['OBJECT']
+        for i in range(dd.shape[0]):
             plt.clf()
-            plt.imshow(nd.rotate(subim_sum, -np.mean(tgt_pas[jj]), reshape=False)[::-1,:],'cubehelix',extent=[640,-640,-640,640])
-            plt.colorbar()
-            plt.xlabel('RA Offset (mas)')
-            plt.ylabel('Dec Offset (mas)')
-            plt.savefig(plotDir+'/subimSum'+objName+imageNum+'.png')
-            plt.clf()
-            #We want to compute: \Sum (subims[i] * shift(best_fit_ims[i])) for 
-            #every possible shift value in 2D. This is just a cross-correlation!
-            #We can use the power of numpy by putting this in a single line.
-            #We are computing best_fit_ims [cross-correlation *] subims
-            crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(best_ims[jj])) * np.fft.rfft2(subims) ), axes=[1,2])
-            #Now rotate and normalise
-            for i in range(len(crats)):
-                crats[i] = nd.rotate(crats[i], -tgt_pas[jj][i], reshape=False)[::-1,:]/np.sum(best_ims[jj][i]**2)
-                all_crats.append(crats[i])
-            plt.imshow(np.average(crats,axis=0),'cubehelix',vmin=0,extent=[640,-640,-640,640])
-            plt.colorbar()
-            plt.xlabel('RA Offset (mas)')
-            plt.ylabel('Dec Offset (mas)')
-            plt.title(objName+' Average Contrast Ratio')
-            plt.savefig(plotDir+'/cratMean'+objName+imageNum+'.png')
-            plt.clf()
-            #We can also compute a background-limited standard deviation, and the crat uncertainty due to
-            #this. 
-            stds = np.empty(len(tgt_ims[jj]))
-            for i, im in enumerate(tgt_ims[jj]):
-                stds[i] = np.std(im[tgt.corner_pix])
-            crat_std = tgt_ims[jj]
-            crat_errors = stds/np.sqrt(np.sum(best_ims[jj]**2,axis=(1,2)))
-            crat_stds = np.std(crats,axis=0)/len(crat_errors)
-            plt.imshow(crat_stds,'cubehelix',vmin=0,extent=[640,-640,-640,640])
-            plt.colorbar()
-            plt.title(objName+' Contrast Ratio Standard Deviation')
-            plt.xlabel('RA Offset (mas)')
-            plt.ylabel('Dec Offset (mas)')
-            plt.savefig(plotDir+'/cratStd'+objName+imageNum+'.png')
-            plt.clf()
-            sz = len(crats[0])
-        oldHeader = pyfits.getheader(filename)
-        hdu = pyfits.PrimaryHDU(all_crats)
-        hdu.header['CRVAL1']=oldHeader['RA']
-        hdu.header['CRVAL2']=oldHeader['DEC']
-        hdu.header['CRPIX1']=sz//2
-        hdu.header['CRPIX2']=sz//2
-        hdu.header['CDELT1']=-1./(3600*1024)
-        hdu.header['CDELT2']=1./(3600*1024)
-        hdu.header['CTYPE1']='RA---TAN'
-        hdu.header['CTYPE2']='DEC--TAN'
-        hdu.header['OBJECT']=oldHeader['OBJECT']
-        
-        hdu.writeto(plotDir+'/crats_'+objName+'.fits',clobber=True)
+            plt.imshow(dd[i,:,:], interpolation='nearest')
+            xy = plt.ginput(1)
+            if (xy[0][0] > REJECT_COLUMN):
+                cal_ims.append(dd[i,:,:])
+                cal_objects.append(cal)
+            else:
+                print("Frame Rejected!")
+    
+    tgt_ims = np.array(tgt_ims)
+    cal_ims = np.array(cal_ims)
+    
+    #Now save the file!
+    col1 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
+    hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
+    hdu2 = pyfits.ImageHDU(cal_ims)
+    hdu3 = pyfits.BinTableHDU(bintab)
+    hdu4 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1]))
+    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3,hdu4])
+    hdulist.writeto(save_dir+'/'+outfile, clobber=True)
+    return save_dir+'/'+outfile
+
+def best_psf_subtract(filename,plotDir):
+    #Create our target model and object model.
+    psfs = pm.Psfs(cubefile=filename)
+    object_model = pm.PtsrcObject()
+    tgt = pm.Target(psfs, object_model, cubefile=filename)
+    cal_objects = pyfits.getdata(filename,2)
+    if not 'cal_objects' in cal_objects.names:
+        cal_objects = pyfits.getdata(filename,3)
+    best_ixs, best_fit_ims = tgt.find_best_psfs([])
+    used_cals = cal_objects['cal_objects'][best_ixs]
+    objName = pyfits.getheader(filename)['OBJECT']
+    #Remove Spaces From Object Name
+    objNoSpaces = objName.split(' ')
+    objName = ''.join(objNoSpaces)
+    imageBreaks = []
+    #tgt_ims = [tgt.ims]
+    #best_ims = [best_fit_ims]
+    #tgt_pas = [tgt.pas]
+   
+    subims = tgt.ims - best_fit_ims
+    subim_sum = np.sum(subims, axis=0) 
+    #We want to compute: \Sum (subims[i] * shift(best_fit_ims[i])) for 
+    #every possible shift value in 2D. This is just a cross-correlation!
+    #We can use the power of numpy by putting this in a single line.
+    #We are computing best_fit_ims [cross-correlation *] subims
+    crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(best_fit_ims)) * np.fft.rfft2(subims) ), axes=[1,2])
+    #Now rotate and normalise
+    rot_crats = []
+    for i in range(len(crats)):
+        rot_crats.append(nd.rotate(crats[i], -tgt.pas[i], reshape=True)[::-1,:]/np.sum(best_fit_ims[i]**2))
+    #We can also compute a background-limited standard deviation, and the crat uncertainty due to
+        #this.
+    sizes = np.zeros(len(rot_crats))
+    for ii in range(0,len(rot_crats)):
+        sizes[ii] = int(len(rot_crats[ii][0]))
+    newSize = int(np.min(sizes))
+    for ii in range(0,len(rot_crats)):
+        rot_crats[ii] = np.array(rot_crats[ii])
+        start = int(sizes[ii]//2-newSize//2)
+        end = int(sizes[ii]//2+newSize//2)+1
+        rot_crats[ii] = rot_crats[ii][start:end,start:end]
+    crats = np.array(rot_crats)
+    stds = np.empty(len(tgt.ims))
+    for i, im in enumerate(tgt.ims):
+        stds[i] = np.std(im[tgt.corner_pix])
+    crat_std = tgt.ims
+    crat_errors = stds/np.sqrt(np.sum(best_fit_ims**2,axis=(1,2)))
+    crat_stds = np.std(crats,axis=0)/len(crat_errors)
+    sz = len(crats[0])
+    outfile = plotDir+'/crats_'+objName+'.fits'
+    oldHeader = pyfits.getheader(filename)
+    header = pyfits.Header(oldHeader)
+    header['CRVAL1']=header['RA']
+    header['CRVAL2']=header['DEC']
+    header['CRPIX1']=sz//2
+    header['CRPIX2']=sz//2
+    header['CDELT1']=-1./(3600*1024)
+    header['CDELT2']=1./(3600*1024)
+    header['CTYPE1']='RA---TAN'
+    header['CTYPE2']='DEC--TAN'
+    header['OBJECT']=oldHeader['OBJECT']
+    hdu = pyfits.PrimaryHDU(crats,header)
+    col1 = pyfits.Column(name='pa', format='E', array=tgt.pas[0:len(crats)])
+    col2 = pyfits.Column(name='cal_objects', format='A40', array=used_cals)
+    hdu2 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2]))
+    hdulist = pyfits.HDUList([hdu,hdu2])
+    hdulist.writeto(outfile,clobber=True)
+    return outfile

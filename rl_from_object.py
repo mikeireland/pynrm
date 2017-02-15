@@ -1,8 +1,11 @@
 import os,sys,os.path,numpy as np
-import contratio as crat
+import rlmodule as rl
+import psf_marginalise as pm
+import scipy.ndimage as nd
+import astropy.io.fits as pyfits
 nameList = sys.argv[4:len(sys.argv)]
-if len(sys.argv)<3:
-    print('Useage: crat_from_object.py raw_directory cube_directory plot_directory object_name (with spaces)')
+if len(sys.argv)<5:
+    print('Useage: rl_from_object.py raw_directory cube_directory plot_directory object_name (with spaces)')
     sys.exit()
 #Combine name into single string
 name = ''
@@ -63,8 +66,5 @@ for kk in range(0,len(elements)):
 for ii in range(0,len(cal_els)):
     cal_cubes.append(cubeDir+'/cube'+str(cal_els[ii])+'.fits')
 
-#Reject bad images
-good_ims = crat.choose_psfs(tgt_cubes,cal_cubes,plotDir)
-#Find best psf for each target image and find contrast ratio
-crat.best_psf_subtract(good_ims,plotDir)
+deconv_file = rl.deconvolve(tgt_cubes,cal_cubes,plotDir)
 
