@@ -1,5 +1,6 @@
 import os,sys,os.path,numpy as np
 import contratio as crat
+import astropy.io.fits as pyfits
 nameList = sys.argv[4:len(sys.argv)]
 if len(sys.argv)<3:
     print('Useage: crat_from_object.py raw_directory cube_directory plot_directory object_name (with spaces)')
