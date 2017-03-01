@@ -75,12 +75,14 @@ def optimize_tilt_derivative(p, mod_ft, im_ft, uv):
 
 
 def optimize_tilt_function(p, mod_ft, im_ft, uv, return_model=False):
-    """Helper function for optimize_tilt.
+    """Helper function for optimize_tilt. This is used  as a function to
+    input into leastsq 
     
     Parameters
     ----------
     
-    p: [xtilt,ytilt]
+    p: numpy array (2): [xtilt,ytilt]
+        The wavefront tilt image-plane pixels.
     
     mod_ft: array
         Model Fourier transform that we want to fit to the image
@@ -90,6 +92,11 @@ def optimize_tilt_function(p, mod_ft, im_ft, uv, return_model=False):
         
     uv: array
         Sampling points for mod_ft and im_ft
+        
+    Returns
+    -------
+    resid: numpy array
+        Array of residuals to the fit.
     """
     new_model = mod_ft*np.exp(1j*(p[0]*uv[0] + p[1]*uv[1]))
     if return_model:
@@ -99,7 +106,13 @@ def optimize_tilt_function(p, mod_ft, im_ft, uv, return_model=False):
 
 def optimize_tilt(mod_ft, im_ft, uv, scale_flux=False, check_fit=False):
     """Given a PSF and an image Fourier transform sampled at points u and
-    v, tilt and scale the model so that it matches the image
+    v, tilt and scale the model so that it matches the image.
+    
+    We do this fitting in the Fourier domain rather than the image-plane, because
+    sub-pixel tilts can be more precise in the Fourier domain. A shift is a convolution
+    with a delta-function centered at the pixel (xshift, yshift). So we can shift
+    by multiplying the Fourier transform of the image by the Fourier transform of this
+    shift operator, which we can call the shift kernel.
     
     Parameters
     ----------
@@ -176,7 +189,7 @@ def prepare_im(im, ref_ft, uv, sampled_uv, corner_pix, center_ft = True, scale =
     return a_psf, a_psf_ft
 
 
-class Psfs:
+class Psfs(object):
     """A set of reference PSFs, which creates the space to marginalise over"""
     def __init__(self, psfs=[], psf_files=[], wave=3.5e-6, diam=10.0,pscale=0.01, \
             cubefile=None, cube_extn=1, hyperparams=[], subtract_outer_median=True, scale=1.0):
@@ -201,6 +214,7 @@ class Psfs:
             Pixel scale in arcsec. 
         """
         self.ndim = 0 #0 until we embed the PSFs in a lower dimensional space!
+        self.use_this_psf = 0 #i.e. just use the first PSF until we're told otherwise.
         if cubefile:
             psfs = pyfits.getdata(cubefile,cube_extn)
         else:
@@ -336,6 +350,16 @@ class Psfs:
         angles. If outside the convex hull, find the nearest edge/faces and
         the simplex that includes one of these and (if possible) extends the furthest 
         in the opposite direction. """
+        
+        #If we havnen't embedded out PSFs into some abstract space, this is simple!
+        if self.ndim==0:
+            if return_image:
+                return self.psf_im(self.use_this_psf)
+            else:
+                return self.psf_fts[self.use_this_psf]
+        
+        #Otherwise, we have to find nearby LLE co-ordinates (an enclosing simplex) and
+        #interpolate between PSFs.
         x = np.array(x)
         enclosing_simplex = self.tri.find_simplex(x)
         if enclosing_simplex<0:
@@ -428,22 +452,16 @@ class Psfs:
         and hyperparameters. Uses the same density kernel as lle_density."""  
         return self.lle_density(x)
         
-class PtsrcObject:
-    """A model for the object on sky, consisting of a single point source.
-    Other objects can inherit this. Generally, there will be some fixed parameters
-    and some variable parameters. The model parameters are *not* imaging parameters, 
-    i.e. do not include x, y, flux variables. """
+class PtsrcObject(object):
     def __init__(self,initp = []):
-        """Initialise the model with default parameters. 
+        """A model for the object on sky, consisting of a single point source.
         
-        p[0]: x position
-        p[1]: y position
-        p[2]: total flux"""
+        Other objects can inherit this. Generally, there will be some fixed parameters
+        and some variable parameters. The model parameters are *not* imaging parameters, 
+        i.e. do not include x, y, flux variables. 
+        """
         self.p = initp
         self.np = len(initp)
-        #self.uv    = np.meshgrid(np.arange(dim/2 + 1), ((np.arange(dim) + dim/2) % dim) - dim/2 )
-        #self.uv2pi = np.meshgrid(-2j * np.pi / self.dim * np.arange(dim/2 + 1),  \
-        #    -2j * np.pi / self.dim * (((np.arange(dim) + dim/2) % dim) - dim/2) )
 
     def model_uv(self, p_in, uv):
         """Return a model of the Fourier transform of the object given a set of
@@ -458,8 +476,35 @@ class PtsrcObject:
             Coordinates in the uv plane """
         return np.ones(uv.shape[1])
 
+class BinaryObject(PtsrcObject):
+    def __init__(self, initp=[]):
+        """A Model with two point-sources
         
-class Target:
+        Parameters
+        ----------
+        init_p: numpy array(3)
+            North Separation in pix, East separation in pix, contrast secondary/primary
+        """
+        super(BinaryObject, self).__init__(initp)
+    
+    def model_uv(self, p_in, uv):
+        """Return a model of the Fourier transform of a binary given a set of points
+        in the uv plane
+        
+        Parameters
+        ----------
+        p_in: array-like
+            North Separation in pix, East Separation in pix, Contrast secondary/primary
+            
+        uv: array-like
+            Coordinates in the uv plane """
+        #The Fourier transform of 2 delta functions is the sum of the Fourier transform
+        #of each delta function. Lets make the primary star be at co-ordinate (0,0)
+        ft_object = np.ones(uv.shape[1]) + p_in[2]*np.exp(1j*(p_in[0]*uv[0] + p_in[1]*uv[1]))
+        ft_object /= 1+p_in[2]
+        return ft_object
+        
+class Target(object):
     """A set of target images"""
     def __init__(self,psfs,object_model,ims=[], im_files=[],hyperparams=[], 
                  cubefile=None, cube_extn=0, pas_extn=2, pas=[], gain=4.0):
@@ -520,9 +565,8 @@ class Target:
         self.im_fts = np.array(im_fts)      
         self.read_var /= len(ims)
         self.var = self.read_var + ims/gain
-
     
-    def lnprob(self, x, p_use=[], tgt_use=[], return_mod_ims=False):
+    def lnprob(self, x, tgt_use=[], return_mod_ims=False):
         """Compute the log probability of a model.
         
         Parameters
@@ -530,7 +574,7 @@ class Target:
         
         x: numpy array
             The input LLE coordinates, followed by the model parameters, in the order:
-            [lle[0],lle[1],,,,lle[len(tgt_use)-1],p_in[0],,,,p_in[len(p_use)-1]], where
+            [lle[0],lle[1],,,,lle[len(tgt_use)-1],p_in[0],,,,p_in[n_params-1], where
             each of lle[0] etc is a list of length psfs.ndim.
             
         p_use: numpy int array (optional)
@@ -544,11 +588,14 @@ class Target:
             Optionally return the model images rather than the log probability.
         """
         x = np.array(x)
-        #Do we want to optimise targets one at a time?
+        #If tgt_use is not given, use all targets.
         if len(tgt_use)==0:
             tgt_use = np.arange(self.n_ims)
         
-        x_lle = x[:self.psfs.ndim * len(tgt_use)].reshape( (len(tgt_use), self.psfs.ndim) )
+        if self.psfs.ndim > 0:
+            x_lle = x[:self.psfs.ndim * len(tgt_use)].reshape( (len(tgt_use), self.psfs.ndim) )
+        else:
+            x_lle=[]
         x_p = x[self.psfs.ndim * self.psfs.npsfs:]
         prior_prob=1.0
         chi2 = 0.0
@@ -591,13 +638,18 @@ class Target:
         """!!!What is this ???"""
         return None
     
-    def marginalise(self,p_use=[],nchain=1000, use_threads=True, start_one_at_a_time=True):
+    def marginalise(self,init_par=[],walker_sdev=[],nchain=1000, use_threads=True, start_one_at_a_time=True):
         """Use the affine invariant Monte-Carlo Markov chain technique to marginalise
         over all PSFs. We cheat a little by not marginalising over the model parameters 
-        simultaneously - the parameters in "p_use" are expected to have Gaussian errors
+        simultaneously - the parameters are expected to have Gaussian errors
         that come out of a least squares process that fits to PSFs from a point source fit 
         (at least this is what I think I meant).
+        
+        WARNING: This doesn't actually marginalise over the model parameters yet, it only
+        marginalises over the LLE parameters for the point source model.
         """
+        if len(init_par) != len(walker_sdev):
+            raise UserWarning("Require same number of parameters (init_par) as walker standard deviations (walker_sdev)!")
         threads = multiprocessing.cpu_count()
         
         if start_one_at_a_time:
@@ -608,24 +660,23 @@ class Target:
         
             #Initialise the chain to random psfs.
             p0 = np.empty( (nwalkers, ndim) )
-            init_par = []
+            init_lle_par = []
             for i in range(nwalkers):
                 p0[i,:] = self.psfs.tri.points[int(np.random.random()*self.psfs.npsfs)]
             for j in range(self.n_ims):
-                kwargs = {"p_use":[], "tgt_use":[j]}
+                kwargs = {"tgt_use":[j]}
                 if use_threads:
                     sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, threads=threads, kwargs=kwargs)
                 else:
                     sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, kwargs=kwargs)
                 sampler.run_mcmc(p0,nchain)
-                init_par.append(sampler.flatchain[np.argmax(sampler.flatlnprobability)])
+                init_lle_par.append(sampler.flatchain[np.argmax(sampler.flatlnprobability)])
                 print("Done initial model for chain {0:d}".format(j))
-            init_par = np.array(init_par).flatten()
+            init_lle_par = np.array(init_lle_par).flatten()
         
         #Minimum number of walkers
-        ndim = self.psfs.ndim * self.n_ims  + len(p_use)
+        ndim = self.psfs.ndim * self.n_ims  + len(init_par)
         nwalkers = 2*ndim
-        kwargs = {"p_use":p_use}
         if use_threads:
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, threads=threads, kwargs=kwargs)
         else:
@@ -635,18 +686,22 @@ class Target:
         p0 = np.empty( (nwalkers, ndim) )
         if start_one_at_a_time:
             for i in range(nwalkers):
-                p0[i] = init_par + 0.01*np.random.normal(size=ndim)*self.psfs.h_density
+                p0[i, :self.psfs.ndim * self.n_ims] = init_lle_par + 0.01*np.random.normal(size=ndim)*self.psfs.h_density
+                #Add in a Gaussian distribution of model parameters.
+                p0[i, self.psfs.ndim * self.n_ims:] = init_par + np.random.normal(size=len(init_par))*walker_sdev
         else:
             for i in range(nwalkers):
                 for j in range(self.n_ims):
                     p0[i,j*self.psfs.ndim:(j+1)*self.psfs.ndim] = \
                         self.psfs.tri.points[int(np.random.random()*self.psfs.npsfs)]
+                #Add in a Gaussian distribution of model parameters.
+                p0[i, self.psfs.ndim * self.n_ims:] = init_par + np.random.normal(size=len(init_par))*walker_sdev
         sampler.run_mcmc(p0,nchain)
         print("Best lnprob: {0:5.2f}".format(np.max(sampler.lnprobability)))
         best_x = sampler.flatchain[np.argmax(sampler.flatlnprobability)] 
         return best_x, sampler
         
-    def find_best_psfs(self, p_fix, p_use=[]):
+    def find_best_psfs(self, p_fix, return_lnprob=False):
         """Make a simple fit of every target image, for fixed model parameters.
         
         Parameters
@@ -656,19 +711,17 @@ class Target:
             Model parameters, that are fixed when finding the best PSF. Note that for a 
             point source model, this should be [].
         
-        p_use: array-like
-            The list of model parameters to use, e.g. [0,1,3], in case we want to fix
-            some of them. 
         """
         
         best_fit_ims = np.empty( (self.n_ims, self.ims[0].shape[0], self.ims[0].shape[1]) )
         best_ixs = np.empty( self.n_ims, dtype=np.int )
+        chi2_total = 0.0
         for i in range(self.n_ims):
             #What is our object model?
             obj_ft = self.object.model_uv(p_fix, self.tgt_uv[i])
         
-            #Mean square errors
-            mses = np.empty(self.psfs.npsfs)
+            #Chi-squared
+            chi2s = np.empty(self.psfs.npsfs)
             mod_ims = np.empty( (self.psfs.npsfs, self.ims[0].shape[0], self.ims[0].shape[1]) )
             for j in range(self.psfs.npsfs):
                 #Convolve the object with the PSF model to form an image model.
@@ -684,12 +737,48 @@ class Target:
                 mod_ims[j] = self.psfs.im_from_ft(mod_ft)
             
                 #Find the mean square uncertainty of this fit
-                mses[j] = np.mean( (mod_ims[j] - self.ims[i])**2 )
+                chi2s[j] = np.sum( (mod_ims[j] - self.ims[i])**2 )
             
             #Find the best image
-            best_ixs[i] = np.argmin(mses)
+            best_ixs[i] = np.argmin(chi2s)
+            chi2_total += np.min(chi2s)
             best_fit_ims[i] = mod_ims[best_ixs[i]]
-        
-        return best_ixs, best_fit_ims
-        
+        if return_lnprob:
+            return -chi2_total/2.0
+        else:
+            return best_ixs, best_fit_ims    
             
+    def marginalise_best_psf(self, init_par=[],walker_sdev=[],nchain=1000, use_threads=True):
+        """Use the affine invariant Monte-Carlo Markov chain technique to marginalise
+        over all PSFs. 
+        
+        Parameters
+        ----------
+        
+        """
+        threads = multiprocessing.cpu_count()
+        
+        #Minimum number of walkers
+        ndim = len(init_par)
+        nwalkers = 2*ndim
+        kwargs = {"return_lnprob":True}
+        if use_threads:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, self.find_best_psfs, threads=threads, kwargs=kwargs)
+        else:
+            sampler = emcee.EnsembleSampler(nwalkers, ndim, self.find_best_psfs, kwargs=kwargs)
+            
+        #Initialise the chain to random parameters.
+        p0 = np.empty( (nwalkers, ndim) )
+        for i in range(nwalkers):
+            p0[i] = init_par + np.random.normal(size=len(init_par))*walker_sdev
+        import time
+        then = time.time()
+        best_ixs, best_fit_ims = self.find_best_psfs(p0[0])
+        now = time.time()
+        print(now-then)
+        print("Running Chain...")
+        sampler.run_mcmc(p0,nchain)
+        print("Best lnprob: {0:5.2f}".format(np.max(sampler.lnprobability)))
+        best_x = sampler.flatchain[np.argmax(sampler.flatlnprobability)] 
+        return best_x, sampler
+          
