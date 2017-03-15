@@ -12,6 +12,10 @@ from the target. This needs the "PGAIN" keyword to be passed as part of the head
 choose_psfs or its GUI version.
 """
 
+#e.g. /Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits
+#kernprof -l best_psf_binary /Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits
+#python -m line_profiler best_psf_binary.lprof
+
 from __future__ import print_function, division
 import sys
 import matplotlib.pyplot as plt

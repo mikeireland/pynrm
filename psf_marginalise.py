@@ -476,6 +476,34 @@ class PtsrcObject(object):
             Coordinates in the uv plane """
         return np.ones(uv.shape[1])
 
+class ModelObject(object):
+    def __init__(self,initp = [], infits=''):
+        """A model for the object on sky, consisting of a single point source.
+        
+        Other objects can inherit this. Generally, there will be some fixed parameters
+        and some variable parameters. The model parameters are *not* imaging parameters, 
+        i.e. do not include x, y, flux variables. 
+        """
+        #Read in the fits file.
+        im = pyfits.getdata(infits)
+        #This should be in North and East co-ordinates.
+        self.p = initp
+        self.np = len(initp)
+XXX
+    def model_uv(self, p_in, uv):
+        """Return a model of the Fourier transform of the object given a set of
+        points in the uv plane
+        
+        Parameters
+        ----------
+        p_in: array-like
+            model parameters. Can be None if if the model has no parameters!
+            
+        uv: array-like
+            Coordinates in the uv plane """
+        return np.ones(uv.shape[1])
+
+
 class BinaryObject(PtsrcObject):
     def __init__(self, initp=[]):
         """A Model with two point-sources
@@ -700,7 +728,11 @@ class Target(object):
         print("Best lnprob: {0:5.2f}".format(np.max(sampler.lnprobability)))
         best_x = sampler.flatchain[np.argmax(sampler.flatlnprobability)] 
         return best_x, sampler
-        
+     #Uncomment the following line for FunnelWeb line_profile.
+
+#kernprof -l best_psf_binary
+#python -m line_profiler best_psf_binary.lprof
+    @profile   
     def find_best_psfs(self, p_fix, return_lnprob=False):
         """Make a simple fit of every target image, for fixed model parameters.
         
@@ -751,6 +783,12 @@ class Target(object):
     def marginalise_best_psf(self, init_par=[],walker_sdev=[],nchain=1000, use_threads=True):
         """Use the affine invariant Monte-Carlo Markov chain technique to marginalise
         over all PSFs. 
+        
+        This brute force algorithm takes a long time, because for every parameter it fits, 
+        it runs a monte-carlo chain which requires nwalkers * nchain evaluations of 
+        find_best_psfs, which in turn requires N_psfs * N_target_frames evaluations of
+        optimize_tilt.
+        
         
         Parameters
         ----------
