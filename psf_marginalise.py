@@ -489,7 +489,7 @@ class ModelObject(object):
         #This should be in North and East co-ordinates.
         self.p = initp
         self.np = len(initp)
-XXX
+#XXX For Eloise - up to here XXX
     def model_uv(self, p_in, uv):
         """Return a model of the Fourier transform of the object given a set of
         points in the uv plane
@@ -592,7 +592,7 @@ class Target(object):
         self.ims = ims      
         self.im_fts = np.array(im_fts)      
         self.read_var /= len(ims)
-        self.var = self.read_var + ims/gain
+        self.ivar = 1.0/(self.read_var + ims/gain)
     
     def lnprob(self, x, tgt_use=[], return_mod_ims=False):
         """Compute the log probability of a model.
@@ -652,7 +652,7 @@ class Target(object):
                 mod_ims.append(mod_im)
             
             #Compute chi-squared
-            chi2 += np.sum((mod_im - self.ims[tgt_use[i]])**2/self.var[tgt_use[i]])
+            chi2 += np.sum((mod_im - self.ims[tgt_use[i]])**2*self.ivar[tgt_use[i]])
             
             #pdb.set_trace()
         if return_mod_ims:
@@ -732,7 +732,7 @@ class Target(object):
 
 #kernprof -l best_psf_binary
 #python -m line_profiler best_psf_binary.lprof
-    @profile   
+#    @profile   
     def find_best_psfs(self, p_fix, return_lnprob=False):
         """Make a simple fit of every target image, for fixed model parameters.
         
@@ -769,7 +769,7 @@ class Target(object):
                 mod_ims[j] = self.psfs.im_from_ft(mod_ft)
             
                 #Find the mean square uncertainty of this fit
-                chi2s[j] = np.sum( (mod_ims[j] - self.ims[i])**2 )
+                chi2s[j] = np.sum( (mod_ims[j] - self.ims[i])**2 * self.ivar[i] )
             
             #Find the best image
             best_ixs[i] = np.argmin(chi2s)
@@ -780,7 +780,7 @@ class Target(object):
         else:
             return best_ixs, best_fit_ims    
             
-    def marginalise_best_psf(self, init_par=[],walker_sdev=[],nchain=1000, use_threads=True):
+    def marginalise_best_psf(self, init_par=[],walker_sdev=[],nchain=100, nburnin=50, use_threads=True):
         """Use the affine invariant Monte-Carlo Markov chain technique to marginalise
         over all PSFs. 
         
@@ -789,6 +789,14 @@ class Target(object):
         find_best_psfs, which in turn requires N_psfs * N_target_frames evaluations of
         optimize_tilt.
         
+        e.g. if running this over a 100 x 100 grid, fitting for 1 parameter with 6 walkers
+        and a chain length of 100, 100 psfs and 50 target frames, this is 3 x 10^10 
+        evaluations of optimize_tilt.
+        
+        An alternative to this would be to just add 2 model parameters per target image,
+        i.e. the tilt of each image, which e.g. could be 50 parameters for 50 target 
+        images. The problem with this is that it would then require nwalkers to be
+        50 times larger in the case of fitting to only 1 parameter (e.g. contrast).
         
         Parameters
         ----------
@@ -814,8 +822,11 @@ class Target(object):
         best_ixs, best_fit_ims = self.find_best_psfs(p0[0])
         now = time.time()
         print(now-then)
-        print("Running Chain...")
-        sampler.run_mcmc(p0,nchain)
+        print("Running Chain... (burn in)")
+        pos, prob, state = sampler.run_mcmc(p0,nburnin)
+        sampler.reset()
+        print("Running Chain... ")
+        sampler.run_mcmc(pos,nchain)
         print("Best lnprob: {0:5.2f}".format(np.max(sampler.lnprobability)))
         best_x = sampler.flatchain[np.argmax(sampler.flatlnprobability)] 
         return best_x, sampler

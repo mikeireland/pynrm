@@ -38,11 +38,15 @@ tgt = pm.Target(psfs, object_model, cubefile=filename)
 north_seps = np.arange(-10,10)+.5
 east_seps = np.arange(-10,10)+.5
 contrasts = np.empty( (len(north_seps), len(east_seps)) )
+north_seps = north_seps[:1] #!!! Remove this !!!
+east_seps = east_seps[:1]   #!!! Remove this !!!
 for i in range(len(north_seps)):
     for j in range(len(east_seps)):
         initp = [north_seps[i], east_seps[i], 0]
         walker_sdev = [0,0,.01]
-        best_x, sampler = tgt.marginalise_best_psf(init_par=initp,walker_sdev=walker_sdev, use_threads=False, nchain=10)
+        best_x, sampler = tgt.marginalise_best_psf(init_par=initp,walker_sdev=walker_sdev, use_threads=False, nchain=100, nburnin=50)
         contrasts[i,j] = best_x[2]
         
-
+#TODO...
+#1) Run in parallel
+#2) Plot residuals e.g. start with best_ixs, best_ims = tgt.find_best_psfs(best_x)
