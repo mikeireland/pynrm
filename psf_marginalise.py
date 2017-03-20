@@ -51,6 +51,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pdb
 from scipy.spatial import Delaunay
+from scipy.interpolate import RectBivariateSpline
 import scipy.ndimage as nd
 import astropy.io.fits as pyfits
 import scipy.optimize as op
@@ -200,7 +201,10 @@ class Psfs(object):
         
         Given that the PSFs have limited support in the Fourier domain, we will store them
         as complex Fourier component vectors on this support. Then the process of fitting
-        to a linear combination of PSFs is 
+        to a linear combination of PSFs is just making a linear combination on this support.
+        
+        Note that the (uv) co-ordinates are stored in a way most convenient for the
+        tilt_function, going from 0 to 2pi over the full Fourier domain.
         
         Parameters
         ----------
@@ -483,13 +487,33 @@ class ModelObject(object):
         Other objects can inherit this. Generally, there will be some fixed parameters
         and some variable parameters. The model parameters are *not* imaging parameters, 
         i.e. do not include x, y, flux variables. 
+        
+        The data must have the same pixel scale as the PSFs and the target images, and 
+        be rotated such that north is up and east is left.
         """
-        #Read in the fits file.
-        im = pyfits.getdata(infits)
-        #This should be in North and East co-ordinates.
+        if len(infits)==0:
+            raise ValueError("Must set keyword infits to a filename!")
         self.p = initp
         self.np = len(initp)
-#XXX For Eloise - up to here XXX
+        
+        #Read in the fits file.
+        im = pyfits.getdata(infits)
+        
+        if im.shape[0] != im.shape[1]:
+            raise ValueError("Model Image must be square")
+        
+        #Take the Fourier transform and make sure we have coordinate arrays ready
+        #for interpolation
+        self.mod_ft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(im)))
+        uv_coord = 2*np.pi*(np.arange(im.shape[0]) - im.shape[0]//2)/float(im.shape[0])
+        #x = np.arange(im.shape[0]) - im.shape[0]//2 #XXX
+        #y = np.arange(im.shape[1]) - im.shape[1]//2
+        #self.mod_ft_func = RectBivariateSpline(uv_coord, uv_coord, self.mod_ft, kx=1, ky=1)
+        self.mod_ft_realfunc = RectBivariateSpline(uv_coord, uv_coord, self.mod_ft.real, kx=1, ky=1)
+        self.mod_ft_imagfunc = RectBivariateSpline(uv_coord, uv_coord, self.mod_ft.imag, kx=1, ky=1)
+        
+        #self.yx = np.meshgrid(x, y)
+
     def model_uv(self, p_in, uv):
         """Return a model of the Fourier transform of the object given a set of
         points in the uv plane
@@ -501,8 +525,9 @@ class ModelObject(object):
             
         uv: array-like
             Coordinates in the uv plane """
-        return np.ones(uv.shape[1])
-
+        ret_array = self.mod_ft_realfunc(uv[0], uv[1], grid=False).astype(np.complex)
+        ret_array += 1j*self.mod_ft_imagfunc(uv[0], uv[1], grid=False)
+        return ret_array
 
 class BinaryObject(PtsrcObject):
     def __init__(self, initp=[]):
@@ -571,10 +596,10 @@ class Target(object):
         self.tgt_uv = np.empty( (self.n_ims, self.psfs.uv.shape[0], self.psfs.uv.shape[1]) )
         #!!! NB Sign of rotation not checked below !!!
         for i in range(self.n_ims):
-            self.tgt_uv[i,0] = self.psfs.uv[0]*np.cos(np.degrees(self.pas[i])) + \
-                               self.psfs.uv[1]*np.sin(np.degrees(self.pas[i]))
-            self.tgt_uv[i,1] = self.psfs.uv[1]*np.cos(np.degrees(self.pas[i])) - \
-                               self.psfs.uv[0]*np.sin(np.degrees(self.pas[i]))
+            self.tgt_uv[i,0] = self.psfs.uv[0]*np.cos(np.radians(self.pas[i])) + \
+                               self.psfs.uv[1]*np.sin(np.radians(self.pas[i]))
+            self.tgt_uv[i,1] = self.psfs.uv[1]*np.cos(np.radians(self.pas[i])) - \
+                               self.psfs.uv[0]*np.sin(np.radians(self.pas[i]))
         self.corner_pix = np.where(1 - ot.circle(self.sz, self.sz))
         self.read_var = 0.0
         #Assumption: all target images have the same readout and/or background
@@ -770,6 +795,7 @@ class Target(object):
             
                 #Find the mean square uncertainty of this fit
                 chi2s[j] = np.sum( (mod_ims[j] - self.ims[i])**2 * self.ivar[i] )
+                #pdb.set_trace()
             
             #Find the best image
             best_ixs[i] = np.argmin(chi2s)
