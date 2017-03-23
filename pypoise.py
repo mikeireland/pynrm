@@ -1162,7 +1162,8 @@ class PYPOISE():
         print("Errors:     {0:6.1f} {1:7.2f} {2:6.2f}".format(errs[0], errs[1], 2.5*np.log10(np.e)*errs[2]/p[0][2]))
         return p[0], errs, p[1]*rchi2        
 
-    def process_block(self, fstart='', fend='', min_files=3, dither=True, add_noise=50, destripe=False):
+    def process_block(self, fstart='', fend='', min_files=3, dither=True, add_noise=50, \
+        destripe=False, subtract_median=False):
         """Process all files in a block (or a directory). The output is
         a bunch of kp files in the cdir.
         
@@ -1221,9 +1222,9 @@ class PYPOISE():
             kp_file = 'kp_' + fits_root + '.fits'
             kp_mn_file = 'kpmn_' + fits_root + '.fits'
             if dither:
-                cube = self.aoinst.clean_dithered(files, out_file=cube_file, destripe=destripe)
+                cube = self.aoinst.clean_dithered(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median)
             else:
-                cube = self.aoinst.clean_no_dither(files, out_file=cube_file, destripe=destripe)
+                cube = self.aoinst.clean_no_dither(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median)
             self.extract_kerphase(cube_file=cube_file, add_noise=add_noise,out_file=kp_file, summary_file=kp_mn_file)
             cube_files.append(cube_file)
             kp_files.append(kp_file)

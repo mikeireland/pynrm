@@ -1,47 +1,8 @@
 """This module provides tools for finding the best fit object model by marginalising
-over the space of possible PSFs
+over the space of possible PSFs.
 
-For testing: 
+For LkCa15 testing, see ./marginalise_image.py.
 
-psfs = Psfs(cubefile='/Users/mireland/python/mcinmc.old/HD169142_2014_ims.fits')
-
-%run psf_marginalise
-psfs = Psfs(cubefile='/Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits')
-object_model = PtsrcObject()
-tgt = Target(psfs, object_model, cubefile='/Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits')
-
-psfs = Psfs(cubefile='/Users/mireland/tel/nirc2/redux/TauL15_2/good_ims_LkCa15.fits')
-object_model = PtsrcObject()
-tgt = Target(psfs, object_model, cubefile='/Users/mireland/tel/nirc2/redux/TauL15_2/good_ims_LkCa15.fits')
-
-
-psfs.lle(ndim=3) #For Tau15_4, ndim=3 is roughly enough.
-tgt.lnprob(np.zeros(psfs.ndim*tgt.n_ims))
-best_x, sampler = tgt.marginalise(nchain=400, use_threads=False)
-mod_ims = tgt.lnprob(best_x, return_mod_ims=True)
-resids = tgt.ims - mod_ims
-
-rot_resid = np.zeros(mod_ims.shape)
-for i in range(len(mod_ims)):
-    rot_resid[i] = nd.rotate(resids[i,::-1], tgt.pas[i], reshape=False)
-
-rot_resid_sum = np.sum(rot_resid,axis=0)/np.max(np.sum(tgt.ims, axis=0))
-plt.clf()
-#plt.imshow(rot_resid_sum, extent=[-.64,.64,-.64,.64], interpolation='nearest', cmap=cm.cubehelix)
-plt.imshow(0.5*(rot_resid_sum + rot_resid_sum1), extent=[-.64,.64,-.64,.64], vmin=-0.002, interpolation='nearest', cmap=cm.cubehelix)
-plt.axis([-0.4,0.4,-0.4,0.4])
-plt.xlabel('Delta RA (arcsec)')
-plt.ylabel('Deta Dec (arcsec)')
-plt.colorbar()
-
-tgt.marginalise()
-
-psfs.display_lle_space()
-psfs.mcmc_explore()
-
-
-pickle.dump((mod_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all27.pkl', 'w'))
-pickle.dump((mod_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all28.pkl', 'w'))
 """
 
 from __future__ import print_function, division
@@ -619,7 +580,7 @@ class Target(object):
         self.read_var /= len(ims)
         self.ivar = 1.0/(self.read_var + ims/gain)
     
-    def lnprob(self, x, tgt_use=[], return_mod_ims=False):
+    def lnprob(self, x, tgt_use=[], return_mod_ims=False, return_mod_psfs=False):
         """Compute the log probability of a model.
         
         Parameters
@@ -654,6 +615,7 @@ class Target(object):
         chi2 = 0.0
         
         mod_ims = []
+        mod_psfs = []
         
         #Loop through the image and add to the chi-squared
         for i in range(len(tgt_use)):
@@ -663,7 +625,10 @@ class Target(object):
             obj_ft = self.object.model_uv(x_p, self.tgt_uv[tgt_use[i]])
             
             #Convolve the object with the PSF model to form an image model.
-            mod_ft = obj_ft * self.psfs.find_lle_psf(x_lle[i], return_image=False)
+            psf_ft = self.psfs.find_lle_psf(x_lle[i], return_image=False)
+            if return_mod_psfs:
+                mod_psfs.append(self.psfs.im_from_ft(psf_ft))
+            mod_ft = obj_ft * psf_ft
             
             #Find the tilt that best matches the image model, and form an image model,
             #and scale the image to match the total flux.
@@ -679,9 +644,14 @@ class Target(object):
             #Compute chi-squared
             chi2 += np.sum((mod_im - self.ims[tgt_use[i]])**2*self.ivar[tgt_use[i]])
             
-            #pdb.set_trace()
-        if return_mod_ims:
+        #Returning multiple things is a little messy, but it saves code duplication, or
+        #un-necessary computation.
+        if return_mod_ims and return_mod_psfs
+            return np.array(mod_ims), np.array(mod_psfs)
+        else if return_mod_ims:
             return np.array(mod_ims)
+        else if return_mod_psfs:
+            return np.array(mod_psfs)
         if prior_prob==0:
             return -np.inf
         else:
