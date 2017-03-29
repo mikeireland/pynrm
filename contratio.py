@@ -14,51 +14,36 @@ def choose_psfs(tgt_cubes,cal_cubes,save_dir):
     header = pyfits.getheader(tgt_cubes[0])
     tgt_ims = []
     cal_ims = []
-    
+    pas = []
     #Reject target data
     bintab = []
     header = pyfits.getheader(tgt_cubes[0])
     for fname in tgt_cubes:
         dd = pyfits.getdata(fname)
         newtab = pyfits.getdata(fname,1)
-        for i in range(dd.shape[0]):
-            plt.clf()
-            plt.imshow(dd[i,:,:], interpolation='nearest')
-            xy = plt.ginput(1)
-            if (xy[0][0] > REJECT_COLUMN):
-                tgt_ims.append(dd[i,:,:])
-                if len(bintab):
-                    bintab = np.append(bintab, newtab[i:i+1])
-                else:
-                    bintab =  newtab[i:i+1]
-            else:
-                print("Frame Rejected!")
-                
+        for ii in range(0,dd.shape[0]):
+        	tgt_ims.append(dd[ii,:,:])
+        	pas.append(newtab['pa'][ii])
+    pas = np.array(pas)
     #Reject calibrator data
     cal_objects = []            
     for fname in cal_cubes:
         dd = pyfits.getdata(fname)
         cal = pyfits.getheader(fname)['OBJECT']
-        for i in range(dd.shape[0]):
-            plt.clf()
-            plt.imshow(dd[i,:,:], interpolation='nearest')
-            xy = plt.ginput(1)
-            if (xy[0][0] > REJECT_COLUMN):
-                cal_ims.append(dd[i,:,:])
-                cal_objects.append(cal)
-            else:
-                print("Frame Rejected!")
+        for ii in range(0,dd.shape[0]):
+        	cal_ims.append(dd[ii,:,:])
+        cal_objects.append(cal)
     
     tgt_ims = np.array(tgt_ims)
     cal_ims = np.array(cal_ims)
     
     #Now save the file!
-    col1 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
+    col1 = pyfits.Column(name='pa', format='E', array=pas)
+    col2 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
     hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
     hdu2 = pyfits.ImageHDU(cal_ims)
-    hdu3 = pyfits.BinTableHDU(bintab)
-    hdu4 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1]))
-    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3,hdu4])
+    hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2]))
+    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
     hdulist.writeto(save_dir+'/'+outfile, clobber=True)
     return save_dir+'/'+outfile
 
@@ -91,8 +76,8 @@ def best_psf_subtract(filename,plotDir):
     #Now rotate and normalise
     rot_crats = []
     for i in range(len(crats)):
-        rot_crats.append(nd.rotate(crats[i], -tgt.pas[i], reshape=True)[::-1,:]/np.sum(best_fit_ims[i]**2))
-    #We can also compute a background-limited standard deviation, and the crat uncertainty due to
+        rot_crats.append(nd.rotate(crats[i], -tgt.pas[i])[::-1,:]/np.sum(best_fit_ims[i]**2))
+        #We can also compute a background-limited standard deviation, and the crat uncertainty due to
         #this.
     sizes = np.zeros(len(rot_crats))
     for ii in range(0,len(rot_crats)):
@@ -101,7 +86,7 @@ def best_psf_subtract(filename,plotDir):
     for ii in range(0,len(rot_crats)):
         rot_crats[ii] = np.array(rot_crats[ii])
         start = int(sizes[ii]//2-newSize//2)
-        end = int(sizes[ii]//2+newSize//2)+1
+        end = int(sizes[ii]//2+newSize//2)
         rot_crats[ii] = rot_crats[ii][start:end,start:end]
     crats = np.array(rot_crats)
     stds = np.empty(len(tgt.ims))
@@ -122,6 +107,10 @@ def best_psf_subtract(filename,plotDir):
     header['CDELT2']=1./(3600*1024)
     header['CTYPE1']='RA---TAN'
     header['CTYPE2']='DEC--TAN'
+    header['CD1_1']=-0.01/3600.
+    header['CD2_2']=0.01/3600.
+    header['CD1_2']=0
+    header['CD2_1']=0
     header['OBJECT']=oldHeader['OBJECT']
     hdu = pyfits.PrimaryHDU(crats,header)
     col1 = pyfits.Column(name='pa', format='E', array=tgt.pas[0:len(crats)])
