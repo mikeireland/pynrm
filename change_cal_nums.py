@@ -14,6 +14,7 @@ path_to_pynrm = '/Users/awallace/Documents/'
 ddir = '/Users/awallace/Documents/161107'
 cdir = '/Users/awallace/Documents/161107_cubes'
 savedir = '.'
+
 for ii in range(0,len(numCals)):
 	num = numCals[ii]
 	#For each number of calibrators, run code which finds contrast ratio
