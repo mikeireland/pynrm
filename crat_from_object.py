@@ -109,6 +109,7 @@ os.system('rm -rf '+tempFile)
 
 crat_im = pyfits.getdata(crat_file)
 pas = pyfits.getdata(crat_file,1)['pa']
+#Take average over frames
 result = np.mean(crat_im,axis=0)
 newPA = np.mean(pas)
 #Set up rotation angle so image is approximately aligned
@@ -148,3 +149,20 @@ hdu.header['OBJECT']=name
 #hdu.header['RADECSYS']='FK5'
 hdulist = pyfits.HDUList([hdu])
 hdulist.writeto(plotDir+'/ave_crat_'+objName+'.fits', clobber=True)
+#Find weighted mean
+weights = np.zeros(crat_im.shape[0])
+for ii in range(0,len(weights)):
+	rms = np.sqrt(np.mean(crat_im[ii]**2))
+	weights[ii] = 1./rms
+
+mean_im = np.zeros(crat_im[0].shape)
+for ii in range(0,len(weights)):
+	mean_im+=weights[ii]*crat_im[ii]
+mean_im/=sum(weights)
+mean_im = nd.rotate(mean_im,newRot,reshape=True)
+size = mean_im.shape[0]
+mean_im = mean_im[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
+hdu2 = pyfits.PrimaryHDU(mean_im)
+hdu2.header = hdu.header
+hdulist = pyfits.HDUList([hdu2])
+hdulist.writeto(plotDir+'/weighted_mean_'+objName+'.fits',clobber=True)
