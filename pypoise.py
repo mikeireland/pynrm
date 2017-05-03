@@ -97,7 +97,7 @@ class PYPOISE():
         in_fits.close()
 
         #Based on which telescope is in use, decide on the mask and wavelength.
-        hinfo = self.aoinst.info_from_header(h)
+        hinfo = self.aoinst.info_from_header(h, subarr=subarr)
         wave = hinfo['wave']
         rad_pixel = hinfo['rad_pixel']
         if (len(dark_file) == 0):
@@ -298,7 +298,7 @@ class PYPOISE():
     
     def extract_kerphase(self,ptok_file='',ftpix=([],[]),fmask=[],ptok=[],cube=[],cube_file='',
         add_noise=0,rnoise=5.0,gain=4.0,out_file='',recompute_ptok=False,
-        use_poise=False,systematic=[],cal_kp=[],summary_file='',pas=[0],
+        use_poise=False,systematic=[],cal_kp=[],summary_file='',pas=[0], subarr=None,
         ptok_out='',window_edges=True, rdir='', cdir='', use_powerspect=True):
         """Extract the kernel-phases.
     
@@ -326,6 +326,8 @@ class PYPOISE():
             added then the covariance matrix re-diagonalised. Important for highly 
             resolved objects.
             WARNING: Not implemented yet.
+        subarr: int
+            Subarray size, if not the default.
     
         Returns
         -------
@@ -361,7 +363,7 @@ class PYPOISE():
             targname = h['TARGNAME']
             rnoise = h['RNOISE']
             gain = h['PGAIN']
-            hinfo = self.aoinst.info_from_header(h)
+            hinfo = self.aoinst.info_from_header(h, subarr=subarr)
             #If we don't over-write the ptok_file, use the default
             if len(ptok_file)==0:
                 ptok_file = hinfo['ftpix_file']
@@ -1163,7 +1165,7 @@ class PYPOISE():
         return p[0], errs, p[1]*rchi2        
 
     def process_block(self, fstart='', fend='', min_files=3, dither=True, add_noise=50, \
-        destripe=False, subtract_median=False):
+        destripe=False, subtract_median=False, subarr=None):
         """Process all files in a block (or a directory). The output is
         a bunch of kp files in the cdir.
         
@@ -1186,16 +1188,14 @@ class PYPOISE():
         if len(fstart)>0:
             wstart = np.where([f.find(fstart) >= 0 for f in self.aoinst.csv_dict['FILENAME']])[0]
             if len(wstart)==0:
-                print("Error: No file named " + fstart)
-                return
+                raise UserWarning("Error: No file named " + fstart + " in the csv file. Maybe run_csv?")
             wstart = wstart[0]
         else:
             wstart = 0
         if len(fend)>0:
             wend = np.where([f.find(fend) >= 0 for f in self.aoinst.csv_dict['FILENAME']])[0]
             if len(wend)==0:
-                print("Error: No file named " + fend)
-                return
+                raise UserWarning("Error: No file named " + fend + " in the csv file. Maybe run_csv?")
             wend = wend[0]
         else:
             wend = len(csv_dict)
@@ -1222,10 +1222,10 @@ class PYPOISE():
             kp_file = 'kp_' + fits_root + '.fits'
             kp_mn_file = 'kpmn_' + fits_root + '.fits'
             if dither:
-                cube = self.aoinst.clean_dithered(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median)
+                cube = self.aoinst.clean_dithered(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median, subarr=subarr)
             else:
-                cube = self.aoinst.clean_no_dither(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median)
-            self.extract_kerphase(cube_file=cube_file, add_noise=add_noise,out_file=kp_file, summary_file=kp_mn_file)
+                cube = self.aoinst.clean_no_dither(files, out_file=cube_file, destripe=destripe, subtract_median=subtract_median, subarr=subarr)
+            self.extract_kerphase(cube_file=cube_file, add_noise=add_noise,out_file=kp_file, summary_file=kp_mn_file, subarr=subarr)
             cube_files.append(cube_file)
             kp_files.append(kp_file)
             kp_mn_files.append(kp_mn_file)    

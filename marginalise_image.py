@@ -25,8 +25,8 @@ psfs.display_lle_space()
 psfs.mcmc_explore()
 
 
-pickle.dump((mod_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all27.pkl', 'w'))
-pickle.dump((mod_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all28.pkl', 'w'))
+pickle.dump((psf_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all27.pkl', 'w'))
+pickle.dump((psf_ims, rot_resid, best_x, sampler.chain, sampler.lnprobability, tgt.ims), open('all28.pkl', 'w'))
 
 best_fit_ims, rot_resid, best_x, chain, lnprobability, ims = pickle.load(open('all28.pkl', 'r'))
 """
@@ -42,29 +42,52 @@ import scipy.ndimage as nd
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_2/good_ims_LkCa15.fits' #30 target images.
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits' #5 target images (in use)
 
-#Create our target model and object model.
-psfs = pm.Psfs(cubefile=cubefile)
-object_model = pm.PtsrcObject()
-tgt = pm.Target(psfs, object_model, cubefile=cubefile)
+redo_psf_stuff = True
+try_to_iterate = False
 
-#Embed the PSFs
-psfs.lle(ndim=3) #For Tau15_4, ndim=3 is roughly enough.
-starting_lnprob = tgt.lnprob(np.zeros(psfs.ndim*tgt.n_ims))
+if redo_psf_stuff:
+    #Create our target model and object model.
+    psfs = pm.Psfs(cubefile=cubefile)
+    object_model = pm.PtsrcObject()
+    tgt = pm.Target(psfs, object_model, cubefile=cubefile)
 
-#Find the best matching PSFs.
-best_x, sampler = tgt.marginalise(nchain=400, use_threads=False)
+    #Embed the PSFs
+    psfs.lle(ndim=3) #For Tau15_4, ndim=3 is roughly enough.
+    starting_lnprob = tgt.lnprob(np.zeros(psfs.ndim*tgt.n_ims))
 
-#Find the resulting PSFs
-best_fit_ims = tgt.lnprob(best_x, return_mod_ims=True)
-subims = tgt.ims - mod_ims
+    #Find the best matching PSFs.
+    best_x, sampler = tgt.marginalise(nchain=400, use_threads=False)
 
-#Find the rotated residuals
-rot_resid = np.empty_like(subims)
-for rr, si, pa in zip(rot_resid, subims, tgt.pas):
-    rr = nd.rotate(si, -pa, reshape=False)[::-1,:]
-rot_resid_sum = np.sum(rot_resid,axis=0)/np.max(np.sum(tgt.ims, axis=0))
+    #Find the resulting PSFs
+    psf_ims = tgt.lnprob(best_x, return_mod_ims=True)
+    subims = tgt.ims - psf_ims
 
-crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(best_fit_ims)) * np.fft.rfft2(subims) ), axes=[1,2])
+    #Find the rotated PSF
+    rot_psf = np.empty_like(subims)
+    for rr, si, pa in zip(rot_psf, psf_ims, tgt.pas):
+        rr = nd.rotate(si, -pa, reshape=False)
+
+    #Find the rotated residuals
+    rot_resid = np.empty_like(subims)
+    for rr, si, pa in zip(rot_resid, subims, tgt.pas):
+        rr = nd.rotate(si, -pa, reshape=False)
+    
+    pickle.dump( (best_fit_ims, rot_resid, rot_psf, best_x, chain, lnprobability, ims), open('psf_stuff.pkl', 'w'))
+else:
+    best_fit_ims, rot_resid, rot_psf, best_x, chain, lnprobability, ims = pickle.load(open('psf_stuff.pkl', 'r'))
+ 
+psf_ims_sum = np.sum(rot_psf,axis=0)
+rot_resid_sum = np.sum(rot_resid,axis=0)
+
+if try_to_iterate:
+    #Enforce positivity
+    rot_resid_sum = np.maximum(rot_resid_sum, 0)
+    fluxratio = np.sum(rot_resid_sum)/np.sum(psf_ims_sum)
+
+    #Now restart with a new object model.
+    object_model = pm.ResidObject(initp=[fluxratio], resid_in=rot_resid_sum, 
+    
+crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(psf_ims)) * np.fft.rfft2(subims) ), axes=[1,2])
 
 #Now rotate and normalise
 for i in range(len(crats)):

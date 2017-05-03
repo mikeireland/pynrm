@@ -443,14 +443,15 @@ class PtsrcObject(object):
 
 class ModelObject(object):
     def __init__(self,initp = [], infits=''):
-        """A model for the object on sky, consisting of a single point source.
+        """A model for the object on sky, consisting of an input fits files.
         
-        Other objects can inherit this. Generally, there will be some fixed parameters
-        and some variable parameters. The model parameters are *not* imaging parameters, 
-        i.e. do not include x, y, flux variables. 
-        
-        The data must have the same pixel scale as the PSFs and the target images, and 
-        be rotated such that north is up and east is left.
+        Parameters
+        ----------
+        initp: array-like
+            Unused: The input parameters
+            
+        infits: string 
+            A filename for an input model fits files.
         """
         if len(infits)==0:
             raise ValueError("Must set keyword infits to a filename!")
@@ -489,6 +490,69 @@ class ModelObject(object):
         ret_array = self.mod_ft_realfunc(uv[0], uv[1], grid=False).astype(np.complex)
         ret_array += 1j*self.mod_ft_imagfunc(uv[0], uv[1], grid=False)
         return ret_array
+
+class ResidObject(object):
+    def __init__(self,initp = [], resid_in=None, psf_in=None):
+        """A model for the object on sky, consisting of a point source and a 
+        map that has been convolved with the PSF map. 
+        
+        The idea is that, iteratively, the fit residuals can be added to to the input 
+        residuals to last model residuals, and the final problem is a standard 
+        deconvolution problem with a known PSF.
+        
+        Parameters
+        ----------
+        initp: array-like
+            A single parameter, the relative flux of the resolved part of the image.
+            
+        resid_in: numpy array
+            Residuals from the previous iteration. Same size and format as the input 
+            image, but with N down and E left when displayed with imshow.
+            
+        psf_in: numpy array
+            The PSF that should be used for the residuals, weighted in the same way.
+        """
+        self.p = initp
+        self.np = len(initp)
+        
+        #Normalise the input image and PSF
+        im = resid_in.copy()
+        im /= np.sum(im)
+        mean_psf = psf_in.copy()
+        mean_psf /= np.sum(mean_psf)
+        
+        #Error checking
+        if im.shape[0] != im.shape[1]:
+            raise ValueError("Model Image must be square")
+        if im.shape != mean_psf.shape
+            raise ValueError("PSF must have the same shape as input residuals.")
+        
+        #Take the Fourier transform and make sure we have coordinate arrays ready
+        #for interpolation. The line below could have a divide by zero - but not where
+        #the Fourier transform has non-zero support.
+        self.mod_ft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(im))) / \
+            np.fft.fftshift(np.fft.fft2(np.fft.fftshift(mean_psf)))
+        
+        uv_coord = 2*np.pi*(np.arange(im.shape[0]) - im.shape[0]//2)/float(im.shape[0])
+        self.mod_ft_realfunc = RectBivariateSpline(uv_coord, uv_coord, self.mod_ft.real, kx=1, ky=1)
+        self.mod_ft_imagfunc = RectBivariateSpline(uv_coord, uv_coord, self.mod_ft.imag, kx=1, ky=1)
+
+
+    def model_uv(self, p_in, uv):
+        """Return a model of the Fourier transform of the object given a set of
+        points in the uv plane
+        
+        Parameters
+        ----------
+        p_in: array-like
+            model parameters. Can be None if if the model has no parameters!
+            
+        uv: array-like
+            Coordinates in the uv plane """
+        ret_array = self.mod_ft_realfunc(uv[0], uv[1], grid=False).astype(np.complex)
+        ret_array += 1j*self.mod_ft_imagfunc(uv[0], uv[1], grid=False)
+        return p_in[0]*ret_array + (1-p_in[0])
+
 
 class BinaryObject(PtsrcObject):
     def __init__(self, initp=[]):

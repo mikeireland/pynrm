@@ -1,6 +1,6 @@
 """NIRC2 specific methods and variables for an AOInstrument.
 """
-from __future__ import division
+from __future__ import division, print_function
 import astropy.io.fits as pyfits
 import numpy as np
 import scipy.ndimage as nd
@@ -166,7 +166,7 @@ class NIRC2(AOInstrument):
         self.csv_dict['ITIME'][ix] + self.csv_dict['COADDS'][ix]
     return block_string
 
- def info_from_header(self, h):
+ def info_from_header(self, h, subarr=None):
     """Find important information from the fits header and store in a common format
     
     Parameters
@@ -182,23 +182,23 @@ class NIRC2(AOInstrument):
     try: inst=h['CURRINST']
     except: inst=''
     if (len(inst)==0):
-        print ("Error: could not find instrument in header...")
+        print("Error: could not find instrument in header...")
         raise UserWarning
     if ((self.instrument != inst) & (inst[0:3] != '###')):
-        print ("Error: software expecting: ", self.instrument, " but instrument is: ", inst)
+        print("Error: software expecting: ", self.instrument, " but instrument is: ", inst)
         raise UserWarning
 
     try: fwo = h['FWONAME']
     except:
-        print ("No FWONAME in NIRC2 header")
+        print("No FWONAME in NIRC2 header")
         raise UserWarning
     try: fwi = h['FWINAME']
     except:
-        print ("No FWINAME in NIRC2 header")
+        print("No FWINAME in NIRC2 header")
         raise UserWarning
     try: slit = h['SLITNAME']
     except:
-        print ("No SLITNAME in NIRC2 header")
+        print("No SLITNAME in NIRC2 header")
         raise UserWarning
 
     if (fwi=='Kp'):
@@ -247,7 +247,7 @@ class NIRC2(AOInstrument):
         wave=3.987e-6
         filter='Bra_cont'
     else:
-        print ("Unknown Filter!")
+        print("Unknown Filter!")
         pdb.set_trace()
     if (slit == 'none'):
         flat_file = 'flat_' + filter + '.fits'
@@ -256,12 +256,12 @@ class NIRC2(AOInstrument):
 
     try: camname = h['CAMNAME']
     except:
-           print ("No CAMNAME in header")
+           print("No CAMNAME in header")
     if (camname == 'narrow'):
         #This comes from the Yelda (2010) paper.
          rad_pixel = 0.009952*(np.pi/180.0/3600.0)
     else:
-        print ("Unknown Camera!")
+        print("Unknown Camera!")
         raise UserWarning
     #Estimate the expected readout noise directly from the header.
     if h['SAMPMODE'] == 2:
@@ -305,11 +305,15 @@ class NIRC2(AOInstrument):
         pupil_params['hole_diam'] = 1.1
         pupil_params['mask_rotation'] = -0.01
         pupil_params['mask'] = 'g9'
-        ftpix_file = 'ftpix_' + filter + '_'+ pupil_params['mask'] + '.fits'
+        if subarr:
+            subarr_string = '_' + str(subarr)
+        else:
+            subarr_string = ''
+        ftpix_file = 'ftpix_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
     elif (fwi == '18holeMsk'):
         pupil_type = 'circ_nrm'
         pupil_params['mask'] = 'g18'
-        print ("Still to figure out 18 hole mask...")
+        print("Still to figure out 18 hole mask...")
         raise UserWarning
     else:
         pupil_type = 'keck'
@@ -381,7 +385,7 @@ class NIRC2(AOInstrument):
         quads[0] += delta
     #Subtract the background
     if subtract_median:
-        print ("Subtracting Medians...")
+        print("Subtracting Medians...")
         MED_DIFF_MULTIPLIER = 4.0
         for i in range(4):
             quad = quads[i,:,:]
@@ -434,7 +438,7 @@ class NIRC2(AOInstrument):
     VAR_THRESHOLD = 10.0
     nf = len(in_files)
     if (nf < 3):
-        print ("At least 3 dark files sre needed for reliable statistics")
+        print("At least 3 dark files sre needed for reliable statistics")
         raise UserWarning
     # Read in the first dark to check the dimensions.
     try:
@@ -445,7 +449,7 @@ class NIRC2(AOInstrument):
     instname = ''
     try: instname=h['CURRINST']
     except:
-        print ("Unknown Header Type")
+        print("Unknown Header Type")
     #Create the output filename if needed
     if (out_file == ''):
         out_file = self.get_dark_filename(h)
@@ -463,7 +467,7 @@ class NIRC2(AOInstrument):
             plt.imshow(np.minimum(adark,1e2))
         else:
             plt.imshow(adark)
-            print ("Median: " + str(np.median(adark)))
+            print("Median: " + str(np.median(adark)))
         plt.pause(0.001)
         #plt.draw()
         darks[i,:,:] = adark
@@ -477,12 +481,12 @@ class NIRC2(AOInstrument):
     var_dark /= nf-2
     #We need to threshold the med_diff quantity in case of low-noise, many subread images
     med_diff = np.maximum(np.median(np.abs(med_dark - np.median(med_dark))),1.0)
-    print ("Median difference: " + str(med_diff))
+    print("Median difference: " + str(med_diff))
     med_var_diff = np.median(np.abs(var_dark - np.median(var_dark)))
     bad_med = np.abs(med_dark - np.median(med_dark)) > med_threshold*med_diff
     bad_var = np.abs(var_dark) > np.median(var_dark) + VAR_THRESHOLD*med_var_diff
-    print ("Pixels with bad mean: " + str(np.sum(bad_med)))
-    print ("Pixels with bad var: " + str(np.sum(bad_var)))
+    print("Pixels with bad mean: " + str(np.sum(bad_med)))
+    print("Pixels with bad var: " + str(np.sum(bad_var)))
     bad = np.logical_or(bad_med, bad_var)
     med_dark[bad] = 0.0
     #Copy the original header to the dark file.
@@ -643,7 +647,7 @@ class NIRC2(AOInstrument):
     
     
  def clean_dithered(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
-    subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
+    subarr=None, extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
     manual_click=False, ddir='', rdir='', cdir='', dither=True, show_wait=1, \
     dodgy_badpix_speedup=False, subtract_median=False, extra_diagnostic_plots=False):
     """Clean a series of fits files, including: applying the dark and flat, removing bad pixels and
@@ -658,6 +662,8 @@ class NIRC2(AOInstrument):
     ----------
     in_files : array_like (dtype=string). 
         A list if input filenames.
+    fmask_file: string
+        The Fourier mask and ftpix fits file - input either this or ftpix and subarr
     dark_file: string
         The dark file, previously created with make_dark
     flat_file: string
@@ -665,8 +671,8 @@ class NIRC2(AOInstrument):
     ftpix: ( (N) array, (N) array)
         The pixels in the data's Fourier Transform that include all non-zero
         values (created using pupil_sampling)
-    subarr: int, optional
-        The width of the subarray.
+    subarr: int
+        The size of the sub-array, if ftpix is given manually rather than as an fmask_file
     extra_threshold: float, optional
         A threshold for identifying additional bad pixels and cosmic rays.
     outfile: string,optional
@@ -688,10 +694,6 @@ class NIRC2(AOInstrument):
         rdir = self.rdir
     if (cdir == ''):
         cdir = self.cdir
-    #Allocate memory for the cube
-    nf = len(in_files)
-    cube = np.zeros((nf,subarr,subarr))
-    bad_cube = np.zeros((nf,subarr,subarr), dtype=np.uint8)
     #Decide on the image size from the first file. !!! are x and y around the right way?
     try:
         in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
@@ -701,13 +703,17 @@ class NIRC2(AOInstrument):
     in_fits.close()
     szx = h['NAXIS1']
     szy = h['NAXIS2']
-    #Allocate memory for the full cube
-    full_cube = np.zeros((nf,szy, szx))
+
     #Extract important information from the header...
-    hinfo = self.info_from_header(h)
+    hinfo = self.info_from_header(h, subarr=subarr)
     rnoise = hinfo['rnoise']
     gain = hinfo['gain']
     rad_pixel = hinfo['rad_pixel']
+    if (len(dark_file) == 0):
+        dark_file = hinfo['dark_file']
+    if (len(flat_file) == 0):
+        flat_file = hinfo['flat_file']
+
     #If we set the fmask manually, then don't use the file.
     if len(fmask) == 0:
         #If no file is given, find it automatically.
@@ -715,13 +721,19 @@ class NIRC2(AOInstrument):
             fmask_file = hinfo['ftpix_file']
         try:
             fmask = pyfits.getdata(rdir + fmask_file,1)
+            subarr = pyfits.getheader(rdir + fmask_file)['SUBARR']
         except:
             print("Error - couldn't find kp/Fourier mask file: " +fmask_file+ " in directory: " + rdir)
             raise UserWarning
-    if (len(dark_file) == 0):
-        dark_file = hinfo['dark_file']
-    if (len(flat_file) == 0):
-        flat_file = hinfo['flat_file']
+    elif not subarr:
+        raise UserWarning("Must set subarr if fmask is set!")
+        
+
+    #Allocate memory for the cube and the full cube
+    nf = len(in_files)
+    cube = np.zeros((nf,subarr,subarr))
+    full_cube = np.zeros((nf,szy, szx))
+    bad_cube = np.zeros((nf,subarr,subarr), dtype=np.uint8)
 
     #Chop out the appropriate part of the flat, dark, bad arrays
     (flat,dark,bad) = self._calibration_subarr(rdir, flat_file, dark_file, szx, szy, wave=hinfo['wave'])
@@ -840,7 +852,7 @@ class NIRC2(AOInstrument):
         if (dither):
             w = np.where( (xpeaks - xpeaks[i])**2 + (ypeaks - ypeaks[i])**2 > 0.5*subarr**2 )[0]
             if len(w) == 0:
-                print ("Error: Can not find sky from dithered data - use dither=False for {0:s}".format(in_files[0]))
+                print("Error: Can not find sky from dithered data - use dither=False for {0:s}".format(in_files[0]))
                 return
             #To avoid too many extra bad pixels, we'll use a median here.
             sky = np.median(subims[w,:,:], axis=0)
@@ -934,7 +946,7 @@ class NIRC2(AOInstrument):
     good = np.where(maxs > median_cut*np.median(maxs))
     good = good[0]
     if (len(good) < nf):
-        print (nf-len(good), "  frames rejected due to low peak counts.")
+        print(nf-len(good), "  frames rejected due to low peak counts.")
     cube = cube[good,:,:]
     nf = np.shape(cube)[0]
     #If a filename is given, save the file.
