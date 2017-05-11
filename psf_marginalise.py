@@ -524,7 +524,7 @@ class ResidObject(object):
         #Error checking
         if im.shape[0] != im.shape[1]:
             raise ValueError("Model Image must be square")
-        if im.shape != mean_psf.shape
+        if im.shape != mean_psf.shape:
             raise ValueError("PSF must have the same shape as input residuals.")
         
         #Take the Fourier transform and make sure we have coordinate arrays ready
@@ -710,11 +710,11 @@ class Target(object):
             
         #Returning multiple things is a little messy, but it saves code duplication, or
         #un-necessary computation.
-        if return_mod_ims and return_mod_psfs
+        if return_mod_ims and return_mod_psfs:
             return np.array(mod_ims), np.array(mod_psfs)
-        else if return_mod_ims:
+        elif return_mod_ims:
             return np.array(mod_ims)
-        else if return_mod_psfs:
+        elif return_mod_psfs:
             return np.array(mod_psfs)
         if prior_prob==0:
             return -np.inf
