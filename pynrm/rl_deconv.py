@@ -40,6 +40,7 @@ def rl_deconv(tgt_fn=None, cal_fn=None, good_ims_fn=None, niter=50):
         cal_ims = pyfits.getdata(cal_fn)
     else:
         header = pyfits.getheader(good_ims_fn)
+        radec = [header['RA'],header['DEC']]
         pas = pyfits.getdata(good_ims_fn,2)['pa']
         #Check for too much sky rotation.
         pa_diffs = pas - pas[0]
