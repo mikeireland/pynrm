@@ -167,6 +167,7 @@ class PYPOISE():
             pmask *= (1 - self.aoinst.hexagon(subarr, np.ceil(p['obstruction_size']/wave*rad_pixel*subarr)))
             pmask = np.minimum(pmask,1)
             #Next rotate 
+            #FIXME
             #!!! Possibly, the sign should be positive on the next line and the pupil image
             #transposed... not sure-but it works for vertang=-44 !!!
             pmask = nd.interpolation.rotate(pmask,-hinfo['vertang_pa'],order=1,reshape=False)

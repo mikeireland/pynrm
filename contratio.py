@@ -1,10 +1,28 @@
+"""A collection of convenience functions for cleaning data cubes and calculating
+contrast ratio maps."""
+
 from __future__ import print_function, division
 import numpy as np, astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import os,sys
 import psf_marginalise as pm
 import scipy.ndimage as nd
+
 def choose_psfs(tgt_cubes,cal_cubes,save_dir):
+    """Manually choose the best PSFs and target images, in a
+    format e.g. good_ims_LkCa15.fits
+    
+    Parameters
+    ----------
+    tgt_cubes: string array
+        Filenames of cube files for the target
+        
+    cal_cubes: string array
+        Filenames of cube files for the calibrator
+    
+    save_dir: string
+        Directory where the cleaned images are to be saved.
+    """
     objName = pyfits.getheader(tgt_cubes[0])['TARGNAME']
     #Remove Spaces From Object Name
     objNoSpaces = objName.split(' ')
@@ -46,15 +64,17 @@ def choose_psfs(tgt_cubes,cal_cubes,save_dir):
     cal_ims = np.array(cal_ims)
     #Now save the file!
     col1 = pyfits.Column(name='pa', format='E', array=pas)
+    hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1]))
     col2 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
     col3 = pyfits.Column(name='cal_cubes', format='A40', array=cubes)
     col4 = pyfits.Column(name='cal_lengths', format='A40', array=cal_lengths)
     col5 = pyfits.Column(name='cal_els', format='A40', array=cal_els)
+    hdu4 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col2,col3,col4,col5]))
     col6 = pyfits.Column(name='tgt_cubes', format='A40', array=tgt_cubes)
+    hdu5 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col6]))
     hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
     hdu2 = pyfits.ImageHDU(cal_ims)
-    hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5,col6]))
-    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
+    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3,hdu4,hdu5])
     hdulist.writeto(save_dir+'/'+outfile, clobber=True)
     return save_dir+'/'+outfile
 

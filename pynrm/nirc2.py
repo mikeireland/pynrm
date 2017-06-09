@@ -220,7 +220,11 @@ class NIRC2(AOInstrument):
         wave = 3.3e-6
         filter='PAH'
     elif (fwi=='Ms'):
-        wave = 4.67e-6
+        #The central wavelength for this filter in the manual is 4.67 microns, with 
+        #a width of 0.24 microns. We will set the wavelength to the long edge of this
+        #wavelength range in order to ensure we have enough signal - data tend to be
+        #noisy in this filter!
+        wave = 4.79e-6
         filter = 'Ms'
     elif (fwi=='CH4_long'):
         wave   = 1.68e-6

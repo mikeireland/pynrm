@@ -38,9 +38,11 @@ import psf_marginalise as pm
 import scipy.ndimage as nd
 import astropy.io.fits as pyfits
 import scipy.ndimage as nd
+import pickle
 
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_2/good_ims_LkCa15.fits' #30 target images.
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits' #5 target images (in use)
+cubefile='/Users/mireland/tel/nirc2/redux/LkCa15/BrA/good_ims_LkCa15_edgecor.fits' 
 
 redo_psf_stuff = True
 try_to_iterate = False
@@ -71,10 +73,12 @@ if redo_psf_stuff:
     rot_resid = np.empty_like(subims)
     for rr, si, pa in zip(rot_resid, subims, tgt.pas):
         rr = nd.rotate(si, -pa, reshape=False)
-    
-    pickle.dump( (best_fit_ims, rot_resid, rot_psf, best_x, chain, lnprobability, ims), open('psf_stuff.pkl', 'w'))
+
+    chain = sampler.chain
+    lnprobability = sampler.lnprobability
+    pickle.dump( (psf_ims, rot_resid, rot_psf, best_x, chain, lnprobability, tgt.ims), open('psf_stuff.pkl', 'w'))
 else:
-    best_fit_ims, rot_resid, rot_psf, best_x, chain, lnprobability, ims = pickle.load(open('psf_stuff.pkl', 'r'))
+    psf_ims, rot_resid, rot_psf, best_x, chain, lnprobability, tgt,ims = pickle.load(open('psf_stuff.pkl', 'r'))
  
 psf_ims_sum = np.sum(rot_psf,axis=0)
 rot_resid_sum = np.sum(rot_resid,axis=0)
@@ -85,11 +89,10 @@ if try_to_iterate:
     fluxratio = np.sum(rot_resid_sum)/np.sum(psf_ims_sum)
 
     #Now restart with a new object model.
-    object_model = pm.ResidObject(initp=[fluxratio], resid_in=rot_resid_sum, 
+    object_model = pm.ResidObject(initp=[fluxratio], resid_in=rot_resid_sum) #!!! Incomplete!!!
     
 crats = np.fft.fftshift(np.fft.irfft2(np.conj(np.fft.rfft2(psf_ims)) * np.fft.rfft2(subims) ), axes=[1,2])
 
 #Now rotate and normalise
 for i in range(len(crats)):
-    crats[i] = nd.rotate(crats[i], -tgt.pas[i], reshape=False)[::-1,:]/np.sum(best_fit_ims[i]**2)
-
+    crats[i] = nd.rotate(crats[i], -tgt.pas[i], reshape=False)[::-1,:]/np.sum(psf_ims[i]**2)
