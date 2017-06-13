@@ -1,28 +1,10 @@
-"""A collection of convenience functions for cleaning data cubes and calculating
-contrast ratio maps."""
-
 from __future__ import print_function, division
 import numpy as np, astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import os,sys
 import psf_marginalise as pm
 import scipy.ndimage as nd
-
 def choose_psfs(tgt_cubes,cal_cubes,save_dir):
-    """Manually choose the best PSFs and target images, in a
-    format e.g. good_ims_LkCa15.fits
-    
-    Parameters
-    ----------
-    tgt_cubes: string array
-        Filenames of cube files for the target
-        
-    cal_cubes: string array
-        Filenames of cube files for the calibrator
-    
-    save_dir: string
-        Directory where the cleaned images are to be saved.
-    """
     objName = pyfits.getheader(tgt_cubes[0])['TARGNAME']
     #Remove Spaces From Object Name
     objNoSpaces = objName.split(' ')
@@ -64,17 +46,15 @@ def choose_psfs(tgt_cubes,cal_cubes,save_dir):
     cal_ims = np.array(cal_ims)
     #Now save the file!
     col1 = pyfits.Column(name='pa', format='E', array=pas)
-    hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1]))
     col2 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
-    col3 = pyfits.Column(name='cal_cubes', format='A40', array=cubes)
+    col3 = pyfits.Column(name='cal_cubes', format='A200', array=cubes)
     col4 = pyfits.Column(name='cal_lengths', format='A40', array=cal_lengths)
     col5 = pyfits.Column(name='cal_els', format='A40', array=cal_els)
-    hdu4 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col2,col3,col4,col5]))
-    col6 = pyfits.Column(name='tgt_cubes', format='A40', array=tgt_cubes)
-    hdu5 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col6]))
+    col6 = pyfits.Column(name='tgt_cubes', format='A200', array=tgt_cubes)
     hdu1 = pyfits.PrimaryHDU(tgt_ims, header)
     hdu2 = pyfits.ImageHDU(cal_ims)
-    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3,hdu4,hdu5])
+    hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5,col6]))
+    hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
     hdulist.writeto(save_dir+'/'+outfile, clobber=True)
     return save_dir+'/'+outfile
 
@@ -98,11 +78,7 @@ def best_psf_subtract(filename,plotDir):
 	for ii in range(0,len(used_cals)):
 		size = used_cals[ii][2]
 		num = used_cals[ii][3]
-		count = 0
-		for jj in range(0,num):
-			count+=int(all_sizes[jj][1])
-		element = best_ixs[ii]-count
-		used_cals[ii] = [used_cals[ii][0],used_cals[ii][1],element]
+		used_cals[ii] = [used_cals[ii][0],used_cals[ii][1],used_cals[ii][3]]
 	
 	objName = pyfits.getheader(filename)['TARGNAME']
 	#Remove Spaces From Object Name
@@ -123,7 +99,7 @@ def best_psf_subtract(filename,plotDir):
 	#Now rotate and normalise
 	rot_crats = []
 	for i in range(len(crats)):
-		rot_crats.append(nd.rotate(crats[i], -tgt.pas[i])[::-1,:]/np.sum(best_fit_ims[i]**2))
+		rot_crats.append(nd.rotate(crats[i], -tgt.pas[i])/np.sum(best_fit_ims[i]**2))
 
 	sizes = np.zeros(len(rot_crats))
 	for ii in range(0,len(rot_crats)):
@@ -161,9 +137,9 @@ def best_psf_subtract(filename,plotDir):
 	hdu = pyfits.PrimaryHDU(crats,header)
 	col1 = pyfits.Column(name='pa', format='E', array=tgt.pas[0:len(crats)])
 	col2 = pyfits.Column(name='cal_objects', format='A40', array=[row[0] for row in used_cals])
-	col3 = pyfits.Column(name='cal_cubes', format='A40', array=[row[1] for row in used_cals])
+	col3 = pyfits.Column(name='cal_cubes', format='A200', array=[row[1] for row in used_cals])
 	col4 = pyfits.Column(name='cal_elements', format='E', array=[row[2] for row in used_cals])
-	col5 = pyfits.Column(name='tgt_cubes', format='A40', array=cal_objects['tgt_cubes'])
+	col5 = pyfits.Column(name='tgt_cubes', format='A200', array=cal_objects['tgt_cubes'])
 	col6 = pyfits.Column(name='tgt_elements', format='E', array=cal_objects['tgt_els'])
 	hdu2 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5,col6]))
 	hdulist = pyfits.HDUList([hdu,hdu2])
@@ -182,20 +158,7 @@ def marginalise_image(filename,plotDir):
 	best_ixs, best_fit_ims = tgt.find_best_psfs([])
 	used_cals = []
 	for ii in range(0,len(best_ixs)):
-		used_cals.append([cal_objects['cal_objects'][best_ixs[ii]],cal_objects['cal_cubes'][best_ixs[ii]],int(cal_objects['cal_lengths'][best_ixs[ii]]),int(cal_objects['cal_els'][best_ixs[ii]])])
-	all_sizes = []
-	for ii in range(0,len(cal_objects['cal_objects'])):
-		if len(all_sizes)>0 and cal_objects['cal_cubes'][ii] in all_sizes[len(all_sizes)-1]:
-			continue
-		all_sizes.append([cal_objects['cal_cubes'][ii],cal_objects['cal_lengths'][ii]])
-	for ii in range(0,len(used_cals)):
-		size = used_cals[ii][2]
-		num = used_cals[ii][3]
-		count = 0
-		for jj in range(0,num):
-			count+=int(all_sizes[jj][1])
-		element = best_ixs[ii]-count
-		used_cals[ii] = [cal_objects['cal_objects'][num],cal_objects['cal_cubes'][num],element]
+		used_cals.append([cal_objects['cal_objects'][best_ixs[ii]],cal_objects['cal_cubes'][best_ixs[ii]],int(cal_objects['cal_els'][best_ixs[ii]])])
 	
 	objName = pyfits.getheader(filename)['TARGNAME']
 	#Remove Spaces From Object Name
@@ -254,9 +217,9 @@ def marginalise_image(filename,plotDir):
 	hdu = pyfits.PrimaryHDU(crats,header)
 	col1 = pyfits.Column(name='pa', format='E', array=tgt.pas[0:len(crats)])
 	col2 = pyfits.Column(name='cal_objects', format='A40', array=[row[0] for row in used_cals])
-	col3 = pyfits.Column(name='cal_cubes', format='A40', array=[row[1] for row in used_cals])
+	col3 = pyfits.Column(name='cal_cubes', format='A200', array=[row[1] for row in used_cals])
 	col4 = pyfits.Column(name='cal_elements', format='E', array=[row[2] for row in used_cals])
-	col5 = pyfits.Column(name='tgt_cubes', format='A40', array=cal_objects['tgt_cubes'])
+	col5 = pyfits.Column(name='tgt_cubes', format='A200', array=cal_objects['tgt_cubes'])
 	hdu2 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5]))
 	hdulist = pyfits.HDUList([hdu,hdu2])
 	hdulist.writeto(outfile,clobber=True)

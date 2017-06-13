@@ -1,10 +1,12 @@
 import os,sys,os.path,numpy as np,copy
 import contratio as crat
 import astropy.io.fits as pyfits
-import scipy.ndimage as nd
+import scipy.ndimage as nd,matplotlib.pyplot as plt
+sys.path.append('/Users/awallace/Documents/pynrm/')
+import stats
 nameList = sys.argv[4:len(sys.argv)]
 if len(sys.argv)<4:
-    print('Useage: crat_from_object.py data_directory_location plot_directory num_cals_per_target object_name (with spaces)')
+    print('Useage: crat_all_images.py data_directory_location plot_directory num_cals_per_target object_name (with spaces)')
     sys.exit()
 #Combine name into single string
 name = ''
@@ -18,8 +20,14 @@ else:
 #Remove Spaces From Object Name
 objNoSpaces = name.split(' ')
 objName = ''.join(objNoSpaces)
-dataDir = sys.argv[1]
-plotDir = sys.argv[2]
+if sys.argv[1][0]=='/':
+	dataDir = sys.argv[1]
+else:
+	dataDir = os.getcwd()+'/'+sys.argv[1]
+if sys.argv[2][0]=='/':
+	plotDir = sys.argv[2]
+else:
+	plotDir = os.getcwd()+'/'+sys.argv[2]
 outfiles = []
 #cycle through all existing data files
 for year in range(11,20):
@@ -64,7 +72,7 @@ for year in range(11,20):
 						newEntry.append(entry[nn])
 				#Find object name
 				cubeFile = cubeDir+'/cube'+str(int(entry[0]))+'.fits'
-				if os.path.isfile(cubeFile) and pyfits.getheader(cubeFile)['TARGNAME']==name:
+				if os.path.isfile(cubeFile) and pyfits.getheader(cubeFile)['OBJECT']==name:
 					elements.append([int(entry[0]),rawDir])
 					lineNums.append([total,rawDir])
 				all_elements.append([int(entry[0]),rawDir])
@@ -87,7 +95,7 @@ for year in range(11,20):
 						header = pyfits.getheader(cubeDir+'/cube'+str(all_elements[ii][0])+'.fits')
 						if not all_elements[ii][1]==rawDir:
 							break
-						if not header['TARGNAME']==name:
+						if not header['OBJECT']==name:
 							cal_els.append(all_elements[ii])
 						ii-=1
 					elif not os.path.isfile(cubeDir+'/cube'+str(all_elements[ii][0])+'.fits'):
@@ -98,7 +106,7 @@ for year in range(11,20):
 						header = pyfits.getheader(cubeDir+'/cube'+str(all_elements[jj][0])+'.fits')
 						if not all_elements[jj][1]==rawDir:
 							continue
-						if not header['TARGNAME']==name:
+						if not header['OBJECT']==name:
 							cal_els.append(all_elements[jj])
 						jj+=1
 					elif jj>=len(all_elements) or not os.path.isfile(cubeDir+'/cube'+str(all_elements[jj][0])+'.fits'):
@@ -141,9 +149,9 @@ for year in range(11,20):
 					image = cube[jj]
 					if (np.max(image)-np.mean(image))/np.std(image)>19:
 						num+=1
-				cal = [pyfits.getheader(cal_cubes[ii])['TARGNAME'],cubeDir+'/cube'+str(cal_els[ii][0])+'.fits',str(num),str(ii)]
 				for jj in range(0,len(cube)):
 					image = cube[jj]
+					cal = [pyfits.getheader(cal_cubes[ii])['OBJECT'],cubeDir+'/cube'+str(cal_els[ii][0])+'.fits',str(num),str(jj)]
 					if (np.max(image)-np.mean(image))/np.std(image)>19:
 						cal_ims.append(image)
 						cal_objects.append(cal)
@@ -162,10 +170,10 @@ for year in range(11,20):
 			hdu2 = pyfits.ImageHDU(cal_ims)
 			col1 = pyfits.Column(name='pa', format='E', array=pas)
 			col2 = pyfits.Column(name='cal_objects', format='A40', array=[row[0] for row in cal_objects])
-			col3 = pyfits.Column(name='cal_cubes', format='A40', array=[row[1] for row in cal_objects])
+			col3 = pyfits.Column(name='cal_cubes', format='A200', array=[row[1] for row in cal_objects])
 			col4 = pyfits.Column(name='cal_lengths', format='A40', array=[row[2] for row in cal_objects])
 			col5 = pyfits.Column(name='cal_els', format='A40', array=[row[3] for row in cal_objects])
-			col6 = pyfits.Column(name='tgt_cubes', format='A40', array=tgt_cubes)
+			col6 = pyfits.Column(name='tgt_cubes', format='A200', array=tgt_cubes)
 			col7 = pyfits.Column(name='tgt_els', format='E', array=tgt_els)
 			hdu3 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5,col6,col7]))
 			hdulist = pyfits.HDUList([hdu1,hdu2,hdu3])
@@ -238,13 +246,13 @@ header['CD1_1']=-0.01/3600.
 header['CD2_2']=0.01/3600.
 header['CD1_2']=0
 header['CD2_1']=0
-header['OBJECT']=oldHeader['TARGNAME']
+header['OBJECT']=oldHeader['OBJECT']
 hdu = pyfits.PrimaryHDU(crat_ims,header)
 col1 = pyfits.Column(name='pa', format='E', array=pas)
 col2 = pyfits.Column(name='cal_objects', format='A40', array=cal_objects)
-col3 = pyfits.Column(name='cal_cubes', format='A40', array=cal_cubes)
+col3 = pyfits.Column(name='cal_cubes', format='A200', array=cal_cubes)
 col4 = pyfits.Column(name='cal_elements', format='E', array=cal_elements)
-col5 = pyfits.Column(name='tgt_cubes', format='A40', array=tgt_cubes)
+col5 = pyfits.Column(name='tgt_cubes', format='A200', array=tgt_cubes)
 col6 = pyfits.Column(name='tgt_indices', format='E', array=tgt_elements)
 col7 = pyfits.Column(name='observation_dates', format='A40', array=dates)
 hdu2 = pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2,col3,col4,col5,col6,col7]))
@@ -256,14 +264,14 @@ pas = pyfits.getdata(crat_file,1)['pa']
 result = np.mean(crat_im,axis=0)
 newPA = np.mean(pas)
 #Set up rotation angle so image is approximately aligned
-#Make sure north is never more than 60 degrees from vertical
+#Make sure north is never more than 45 degrees from vertical
 newRot = newPA
 while newRot>180:
     newRot-=360
 while newRot<-180:
     newRot+=360
 newRot = 90-newRot
-while newRot>60 or newRot<-60:
+while newRot>45 or newRot<-45:
     if newRot<0:
         newRot+=90
     elif newRot>0:
@@ -271,7 +279,7 @@ while newRot>60 or newRot<-60:
     
 result = nd.rotate(result,newRot,reshape=True)
 size = result.shape[0]
-sz = 128
+sz = pyfits.getdata(tgt_cubes[0]).shape[1]
 #Resize the result so it is the same size as original image
 result = result[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
 #Store average plot in FITS file
@@ -295,19 +303,25 @@ hdu.header['OBJECT']=name
 hdulist = pyfits.HDUList([hdu])
 hdulist.writeto(plotDir+'/ave_crat_'+objName+'.fits', clobber=True)
 #Find weighted mean
-weights = np.zeros(crat_im.shape[0])
-for ii in range(0,len(weights)):
-	rms = np.sqrt(np.mean(crat_im[ii]**2))
-	weights[ii] = 1./rms
+mean_im = stats.weighted_mean(crat_im)
+std_im = stats.bootstrap(crat_im,100)
+std_im[np.where(std_im==0)] = 1e9
+significance = mean_im/std_im
 
-mean_im = np.zeros(crat_im[0].shape)
-for ii in range(0,len(weights)):
-	mean_im+=weights[ii]*crat_im[ii]
-mean_im/=sum(weights)
 mean_im = nd.rotate(mean_im,newRot,reshape=True)
 size = mean_im.shape[0]
 mean_im = mean_im[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
+
 hdu2 = pyfits.PrimaryHDU(mean_im)
 hdu2.header = hdu.header
 hdulist = pyfits.HDUList([hdu2])
-hdulist.writeto(plotDir+'/weighted_mean_'+objName+'.fits',clobber=True)
+hdulist.writeto(plotDir+'/weighted_mean_'+objName+'.fits', clobber=True)
+significance = nd.rotate(significance,newRot,reshape=True)
+size = significance.shape[0]
+significance = significance[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
+#significance[np.where(significance>100*np.median(significance))] = 0
+#significance[np.where(np.isnan(significance))] = 0
+hdu3 = pyfits.PrimaryHDU(significance)
+hdu3.header = hdu.header
+hdulist = pyfits.HDUList([hdu3])
+hdulist.writeto(plotDir+'/significance_'+objName+'.fits', clobber=True)
