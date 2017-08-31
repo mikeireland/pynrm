@@ -234,7 +234,7 @@ class Psfs(object):
         self.sampled_uv, self.uv = make_uv_grid(sz, diam, wave, pscale)
         
         psf_mn = np.sum(psfs,0)/psfs.shape[0]
-        psf_mn_ft = np.fft.rfft2(psf_mn)[sampled_uv]
+        psf_mn_ft = np.fft.rfft2(psf_mn)[self.sampled_uv]
         psf_fts = []
         #NB This should probably be run twice - once to get a better psf_mn_ft.
         corner_pix = np.where(1 - ot.circle(self.sz, self.sz))
@@ -784,6 +784,8 @@ class Target(object):
                 sampler.run_mcmc(p0,nchain)
                 init_lle_par.append(sampler.flatchain[np.argmax(sampler.flatlnprobability)])
                 print("Done initial model for chain {0:d}".format(j))
+                #if j==1:
+                #    import pdb; pdb.set_trace() #XXX
             init_lle_par = np.array(init_lle_par).flatten()
         
         #Minimum number of walkers
@@ -793,6 +795,9 @@ class Target(object):
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, threads=threads, kwargs=kwargs)
         else:
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, kwargs=kwargs)
+            
+        #The initial probability from starting one at a time...
+        print("Initial lnprob: {0:5.2f}".format(self.lnprob(init_lle_par)))
             
         #Initialise the chain to random psfs.
         p0 = np.empty( (nwalkers, ndim) )

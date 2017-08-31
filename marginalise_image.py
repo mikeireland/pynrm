@@ -7,9 +7,10 @@ Questions (for Alex?):
 1) How important is the *time* axis in determining PSFs? Is it good enough to become a
 prior?
 2) Why did psf_marginalise choose a blurry prior for LkCa15? Was this because there 
-was resolved structure? Or was 
+was resolved structure? 
 
 #--------
+### Examples of running code ###
 rot_resid_sum = np.sum(rot_resid,axis=0)/np.max(np.sum(tgt.ims, axis=0))
 plt.clf()
 #plt.imshow(rot_resid_sum, extent=[-.64,.64,-.64,.64], interpolation='nearest', cmap=cm.cubehelix)
@@ -42,7 +43,7 @@ import pickle
 
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_2/good_ims_LkCa15.fits' #30 target images.
 cubefile='/Users/mireland/tel/nirc2/redux/TauL15_4/good_ims_LkCa15.fits' #5 target images (in use)
-cubefile='/Users/mireland/tel/nirc2/redux/LkCa15/BrA/good_ims_LkCa15_edgecor.fits' 
+#cubefile='/Users/mireland/tel/nirc2/redux/LkCa15/BrA/good_ims_LkCa15_edgecor.fits' 
 
 redo_psf_stuff = True
 try_to_iterate = False
@@ -57,6 +58,8 @@ if redo_psf_stuff:
     psfs.lle(ndim=3) #For Tau15_4, ndim=3 is roughly enough.
     starting_lnprob = tgt.lnprob(np.zeros(psfs.ndim*tgt.n_ims))
 
+    print("Null log probability: {0:5.3f}".format(starting_lnprob))
+    
     #Find the best matching PSFs.
     best_x, sampler = tgt.marginalise(nchain=400, use_threads=False)
 
@@ -66,13 +69,17 @@ if redo_psf_stuff:
 
     #Find the rotated PSF
     rot_psf = np.empty_like(subims)
-    for rr, si, pa in zip(rot_psf, psf_ims, tgt.pas):
-        rr = nd.rotate(si, -pa, reshape=False)
+    #for rr, si, pa in zip(rot_psf, psf_ims, tgt.pas):
+    #    rr = nd.rotate(si, -pa, reshape=False)
+    for i, pa in enumerate(tgt.pas):
+        rot_psf[i] = nd.rotate(psf_ims[i], -pa, reshape=False)
 
     #Find the rotated residuals
     rot_resid = np.empty_like(subims)
-    for rr, si, pa in zip(rot_resid, subims, tgt.pas):
-        rr = nd.rotate(si, -pa, reshape=False)
+    #for rr, si, pa in zip(rot_resid, subims, tgt.pas):
+    #    rr = nd.rotate(si, -pa, reshape=False)
+    for i, pa in enumerate(tgt.pas):
+        rot_resid[i] = nd.rotate(subims[i], -pa, reshape=False)
 
     chain = sampler.chain
     lnprobability = sampler.lnprobability
