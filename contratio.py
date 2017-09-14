@@ -5,6 +5,22 @@ import os,sys
 import psf_marginalise as pm
 import scipy.ndimage as nd
 def choose_psfs(tgt_cubes,cal_cubes,save_dir):
+	"""Choose the target and PSF images to use and save images in same file.
+	
+	Parameters
+	----------
+	tgt_cubes: (nTgtCubes) list of strings
+	           The list of target cube files.
+	cal_cubes: (nPSFCubes) list of strings
+	           The list of PSF cube files.
+	save_dir: string
+	          Where the resultant file will be saved.
+	          
+	Returns
+	----------
+	output file: string
+	             The name and location of the resultant file.
+	"""
     objName = pyfits.getheader(tgt_cubes[0])['TARGNAME']
     #Remove Spaces From Object Name
     objNoSpaces = objName.split(' ')
@@ -59,6 +75,21 @@ def choose_psfs(tgt_cubes,cal_cubes,save_dir):
     return save_dir+'/'+outfile
 
 def best_psf_subtract(filename,plotDir):
+	"""Find best PSF by finding minimum chi squared for each image and
+	calculate contrast ratio map.
+	
+	Parameters
+	----------
+	filename: string
+	          The name of the file containing both the target and PSF images.
+	plotDir: string
+	         Where the resultant file will be saved.
+	
+	Returns
+	----------
+	outfile: string
+	         The name of the output file.
+	"""
 	#Create our target model and object model.
 	psfs = pm.Psfs(cubefile=filename)
 	object_model = pm.PtsrcObject()
@@ -84,6 +115,9 @@ def best_psf_subtract(filename,plotDir):
 	#Remove Spaces From Object Name
 	objNoSpaces = objName.split(' ')
 	objName = ''.join(objNoSpaces)
+	objDir = plotDir+'/'+objName
+	if not os.path.isdir(objDir):
+		os.makedirs(objDir)
 	imageBreaks = []
 	#tgt_ims = [tgt.ims]
 	#best_ims = [best_fit_ims]
@@ -99,9 +133,9 @@ def best_psf_subtract(filename,plotDir):
 	#Now rotate and normalise
 	rot_crats = []
 	for i in range(len(crats)):
-		rot_crats.append(nd.rotate(crats[i], -tgt.pas[i])/np.sum(best_fit_ims[i]**2))
+		rot_crats.append(nd.rotate(crats[i], -tgt.pas[i],reshape=False)/np.sum(best_fit_ims[i]**2))
 
-	sizes = np.zeros(len(rot_crats))
+	"""sizes = np.zeros(len(rot_crats))
 	for ii in range(0,len(rot_crats)):
 		sizes[ii] = int(len(rot_crats[ii][0]))
 	newSize = int(np.min(sizes))
@@ -109,7 +143,7 @@ def best_psf_subtract(filename,plotDir):
 		rot_crats[ii] = np.array(rot_crats[ii])
 		start = int(sizes[ii]//2-newSize//2)
 		end = int(sizes[ii]//2+newSize//2)
-		rot_crats[ii] = rot_crats[ii][start:end,start:end]
+		rot_crats[ii] = rot_crats[ii][start:end,start:end]"""
 	crats = np.array(rot_crats)
 	stds = np.empty(len(tgt.ims))
 	for i, im in enumerate(tgt.ims):
@@ -118,7 +152,7 @@ def best_psf_subtract(filename,plotDir):
 	crat_errors = stds/np.sqrt(np.sum(best_fit_ims**2,axis=(1,2)))
 	crat_stds = np.std(crats,axis=0)/len(crat_errors)
 	sz = len(crats[0])
-	outfile = plotDir+'/crats_'+objName+'.fits'
+	outfile = objDir+'/crats_'+objName+'_'+str(tgt.ims.shape[1])+'.fits'
 	oldHeader = pyfits.getheader(filename)
 	header = pyfits.Header(oldHeader)
 	header['CRVAL1']=header['RA']
