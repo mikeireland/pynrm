@@ -271,7 +271,6 @@ class PYPOISE():
         #yf: The y Fourier component.
         #A: A matrix relating the npsi pupil phases to
         #    the nphi Fourier components.
-
         print("Finally doing the matrix stuff!")
     
         #As overall piston doesn't matter, we can remove one row (column?) 
