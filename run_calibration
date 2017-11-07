@@ -13,21 +13,27 @@ import sys
 import numpy as np
 # This includes an AO Instrument called "aoinst"
 import pypoise
-import nirc2
+import nirc2, conica
 import pdb
 import os
 
 if len(sys.argv) < 3:
-    print("Useage: run_calibration REDUCTION_DIR DATA_DIR")
+    print("Useage: run_calibration REDUCTION_DIR DATA_DIR [INSTRUMENT]")
     sys.exit()
 
-
-#Create a pypoise instance with a nirc2 AO instrument
-pp = pypoise.PYPOISE(nirc2.NIRC2())
+if len(sys.argv)>3:
+    instname = sys.argv[3]
+else:
+    instname = 'NIRC2'
+if instname=='NIRC2':
+    #Create a pypoise instance with a nirc2 AO instrument
+    pp = pypoise.PYPOISE(nirc2.NIRC2())"""
+elif instname=='NACO':
+    #Create a pypoise instance with a conica AO instrument
+    pp = pypoise.PYPOISE(conica.CONICA())
 
 pp.aoinst.rdir = sys.argv[1] 
 pp.aoinst.ddir = sys.argv[2] 
-
 if pp.aoinst.rdir[-1] != '/':
     pp.aoinst.rdir += '/'
 if pp.aoinst.ddir[-1] != '/':

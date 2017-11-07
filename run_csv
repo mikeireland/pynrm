@@ -4,6 +4,7 @@
 from __future__ import print_function
 import popCSV
 import time#, jpb
+import os,sys
 
 print('Program started at time:')
 print(time.asctime( time.localtime(time.time()) ))
@@ -11,8 +12,19 @@ print(time.asctime( time.localtime(time.time()) ))
 path = './'#jpb.ask('Which directory to run this code?','./') # path to root of directory to walk through, relative to location of script
 outfile = path + "datainfo.csv" # the output file to write to
 textfile = path + "blockinfo.txt" # the output file to write to
-
-keys = ["FILTER", \
+if len(sys.argv)>1:
+    instname = sys.argv[1]
+else:
+    instname = 'NIRC2'
+if instname=='NACO':
+    filter = 'ESO INS OPTI6 ID'
+    inttime = 'EXPTIME'
+    alt = 'ESO TEL ALT'
+elif instname=='NIRC2':
+    filter = 'FILTER'
+    inttime = 'ITIME'
+    alt = 'EL'
+keys = [filter, \
         "EFFWAVE", \
         "OBJECT", \
         "TARGNAME", \
@@ -21,11 +33,11 @@ keys = ["FILTER", \
         "SHRNAME", \
         "SLITNAME",\
         "COADDS", \
-        "ITIME", \
+        inttime, \
         "DATE-OBS", \
         "MJD-OBS", \
         "UTC", \
-        "EL", \
+        alt, \
         "RA", \
         "DEC", \
         "NAXIS1", \
@@ -34,8 +46,7 @@ keys = ["FILTER", \
         "SLITNAME", \
         "FWINUM", \
         "FWONUM"]
-        
-blockkeys = ["FILTER","OBJECT","TARGNAME","COADDS","ITIME","NAXIS1","NAXIS2","SAMPMODE", "MULTISAM"]
+blockkeys = [filter,"OBJECT","TARGNAME","COADDS",inttime,"NAXIS1","NAXIS2","SAMPMODE", "MULTISAM"]     
 
 # The headers for analysis done on the files
 # MULTISAM is 1 if SAMPMODE is 2, else write value in header
@@ -61,7 +72,7 @@ colheads=colheads+keys+operations
 # Begin main part of the script
 ########################
 
-popCSV.popCSV(keys,operations,colheads,path,outfile,textfile=textfile,blockkeys=blockkeys,total_int_keys=["COADDS","ITIME"])
+popCSV.popCSV(keys,operations,colheads,path,outfile,textfile=textfile,blockkeys=blockkeys,total_int_keys=["COADDS",inttime], instname=instname)
 
 
 print('CSV generation finished at time:')

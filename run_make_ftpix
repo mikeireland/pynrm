@@ -10,17 +10,24 @@ import sys
 import numpy as np
 # This includes an AO Instrument called "aoinst"
 import pypoise
-import nirc2
+import nirc2, conica
 import pdb
 import os
-
+import astropy.io.fits as pyfits
 if len(sys.argv)==1:
     print("Useage: run_make_ftpix [s|m|d] rdir ddir fstart nfs")
     sys.exit()
 
-#Create a pypoise instance with a nirc2 AO instrument
-pp = pypoise.PYPOISE(nirc2.NIRC2())
-
+if not sys.argv[len(sys.argv)-1][0] in '0123456789':
+    instname = sys.argv[len(sys.argv)-1]
+else:
+    instname = 'NIRC2'
+if instname=='NIRC2':
+    #Create a pypoise instance with a nirc2 AO instrument
+    pp = pypoise.PYPOISE(nirc2.NIRC2())
+elif instname=='NACO':
+    #Create a pypoise instance with a conica AO instrument
+    pp = pypoise.PYPOISE(conica.CONICA())
 dither_string = sys.argv[1]
 
 if (dither_string.find('s') >= 0):
@@ -38,7 +45,7 @@ else:
     
 pp.aoinst.rdir = sys.argv[2] + '/' 
 pp.aoinst.ddir = sys.argv[3] + '/' 
-fstart = int(sys.argv[4])
+fstart = sys.argv[4]
 nfs    = int(sys.argv[5])
 
 #run_make_ftpix n ~/tel/nirc2/analysis/ScoBin15a/ ~/data/nirc2/150623/ ./ 194 8
@@ -46,10 +53,19 @@ nfs    = int(sys.argv[5])
 
 extn = '.fits'
 
-files = [('n{0:04d}' + extn).format(i + fstart) for i in range(nfs)]
-
+if instname=='NACO':
+	files = []
+	for j in os.listdir(pp.aoinst.ddir):
+		if 'fit' in j:
+			hdr = pyfits.getheader(pp.aoinst.ddir+'/'+j)
+			if hdr['ESO TPL START']==fstart:
+				files.append(pp.aoinst.ddir+'/'+j)
+elif instname=='NIRC2':
+	fstart = int(fstart)
+	files = [('n{0:04d}' + extn).format(i + fstart) for i in range(nfs)]
+print(files)
 if (not os.path.exists(pp.aoinst.rdir + "FTPIX_COMPLETE")):
-    (ftpix, fmask, ptok, pmask) = pp.pupil_sampling(files,dither=do_we_dither)
+    (ftpix, fmask, ptok, pmask) = pp.pupil_sampling(files,dither=do_we_dither,subarr=192)
 
 with open(pp.aoinst.rdir + "FTPIX_COMPLETE","w+") as f:
     f.close()

@@ -184,7 +184,7 @@ class PYPOISE():
             out_diam = mirror_diam/wave*rad_pixel*subarr
             in_diam = obs_size/wave*rad_pixel*subarr
             pmask += (ix[0]**2+ix[1]**2<(out_diam/2.0)**2)
-            pmask *= (ix[0]**2+ix[1]**2>(obs_size/2.0)**2)
+            pmask *= (ix[0]**2+ix[1]**2>(in_diam/2.0)**2)
             pmask = np.minimum(pmask,1)
             pmask_bighole = pmask
         #Now, we create the pupil to kernel-phase array from this pupil mask.
@@ -242,10 +242,10 @@ class PYPOISE():
             pmask[ww[0][badpmask],ww[1][badpmask]] = 0
             print("{0:d} low signal pupil positions eliminated.".format(len(badpmask)))
             #The next 2 lines are pretty useful for demonstrating how this works happens.
-            """plt.clf()
+            plt.clf()
             plt.imshow(pmask + oldpmask,interpolation='nearest')
             #plt.draw()
-            plt.pause(0.001)"""
+            plt.pause(0.001)
             #import pdb; pdb.set_trace()
             #plt.plot(nbadft,'o')
             #plt.semilogy(ps[ftpix]/RR[ftpix])
