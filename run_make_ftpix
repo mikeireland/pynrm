@@ -15,7 +15,7 @@ import pdb
 import os
 import astropy.io.fits as pyfits
 if len(sys.argv)==1:
-    print("Useage: run_make_ftpix [s|m|d] rdir ddir fstart nfs")
+    print("Useage: run_make_ftpix [s|m|d] rdir ddir fstart nfs [instname]")
     sys.exit()
 
 if not sys.argv[len(sys.argv)-1][0] in '0123456789':

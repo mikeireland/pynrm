@@ -23,15 +23,23 @@ import sys
 import numpy as np
 # This includes an AO Instrument called "aoinst"
 import pypoise
-import nirc2
+import nirc2, conica
 import pdb
-import os
+import os, astropy.io.fits as pyfits
 if len(sys.argv)==1:
-    print("Useage: run_clean [u|s|m|d] rdir ddir cdir fstart [fstart1] [...] nfs [nfs1] [...]")
+    print("Useage: run_clean [u|s|m|d] rdir ddir cdir fstart [fstart1] [...] nfs [nfs1] [...] [instname]")
     sys.exit()
 
-#Create a pypoise instance with a nirc2 AO instrument
-pp = pypoise.PYPOISE(nirc2.NIRC2())
+if not sys.argv[len(sys.argv)-1][0] in '0123456789':
+    instname = sys.argv[len(sys.argv)-1]
+else:
+    instname = 'NIRC2'
+if instname=='NIRC2':
+    #Create a pypoise instance with a nirc2 AO instrument
+    pp = pypoise.PYPOISE(nirc2.NIRC2())
+elif instname=='NACO':
+    #Create a pypoise instance with a conica AO instrument
+    pp = pypoise.PYPOISE(conica.CONICA())
 
 do_we_dither = sys.argv[1]
 pp.aoinst.rdir = sys.argv[2] + '/' #'/Users/mireland/tel/nirc2/redux/130717/'
@@ -40,27 +48,40 @@ pp.aoinst.cdir = sys.argv[4] + '/' #'./'
 num_cubes = (len(sys.argv) - 5)//2
 fstart = sys.argv[5:5+num_cubes]
 nfs    = sys.argv[5+num_cubes:5+2*num_cubes]
-
+manual_click=False
+destripe=True
+dither=False
+subtract_median=False
+if (do_we_dither.find('u') >= 0):
+    subtract_median=True
+if (do_we_dither.find('s') >= 0):
+    destripe=False
+if (do_we_dither.find('m') >= 0):
+    manual_click=True
+if (do_we_dither.find('d') >= 0):
+    dither = True
+fileLists = []
+cubeFiles = []
 if (not os.path.exists(pp.aoinst.cdir + "CLEAN_COMPLETE")):
-    fnums = [int(fstart[i])+np.arange(int(nfs[i])) for i in range(0,num_cubes)]
-    extn = '.fits'
-    for j in range(len(fnums)):
-        files = [('n{0:04d}' + extn).format(i) for i in fnums[j]]
-        cube_file = 'cube' + str(fnums[j][0]) + '.fits'
-        manual_click=False
-        destripe=True
-        dither=False
-        subtract_median=False
-        if (do_we_dither.find('u') >= 0):
-            subtract_median=True
-        if (do_we_dither.find('s') >= 0):
-            destripe=False
-        if (do_we_dither.find('m') >= 0):
-            manual_click=True
-        if (do_we_dither.find('d') >= 0):
-            dither = True
-            
-        cube = pp.aoinst.clean_dithered(files, out_file=cube_file, manual_click=manual_click, destripe=destripe, subtract_median=subtract_median, dither=dither)
+    if instname=='NACO':
+        for i in range(len(fstart)):
+            files = []
+            for j in os.listdir(pp.aoinst.ddir):
+                if 'fit' in j:
+                    hdr = pyfits.getheader(pp.aoinst.ddir+'/'+j)
+                    if hdr['ESO TPL START']==fstart[i]:
+                        files.append(pp.aoinst.ddir+'/'+j)
+            fileLists.append(files)
+            cubeFiles.append('cube'+fstart[i]+'.fits')
+    elif instname=='NIRC2':          
+        fnums = [int(fstart[i])+np.arange(int(nfs[i])) for i in range(0,num_cubes)]
+        extn = '.fits'
+        for j in range(len(fnums)):
+            files = [('n{0:04d}' + extn).format(i) for i in fnums[j]]
+            cubeFiles.append('cube' + str(fnums[j][0]) + '.fits')
+            fileLists.append(files)
+    for i in range(num_cubes):   
+    	cube = pp.aoinst.clean_dithered(fileLists[i], subarr=192, out_file=cubeFiles[i], manual_click=manual_click, destripe=destripe, subtract_median=subtract_median, dither=dither)
         
 with open(pp.aoinst.cdir + "CLEAN_COMPLETE","w+") as f:
     f.close()
