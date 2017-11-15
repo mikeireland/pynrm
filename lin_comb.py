@@ -56,6 +56,40 @@ def chiSquared(target,PSF):
 	sz = target.shape[0]
 	value = np.sum((target[0:sz//2-20,0:sz]-PSF[0:sz//2-20,0:sz])**2)+np.sum((target[sz//2+20:sz,0:sz]-PSF[sz//2+20:sz,0:sz])**2)
 	return value
+	
+def sub_background(image):
+	sz = image.shape[0]
+	imFFT = np.fft.rfft2(image)
+	imFFT[int(0.3*imFFT.shape[0]//2):int(1.7*imFFT.shape[0]//2),int(0.3*imFFT.shape[1]//2):int(1.7*imFFT.shape[1]//2)] = 0
+	new = np.fft.irfft2(imFFT)
+	quarters = np.zeros((4,sz//4,sz//4))
+	for ii in range(0,4):
+		xLim = np.array([(ii%2)*(3*sz//4),(ii%2)*(3*sz//4)+sz//4])
+		yLim = np.array([(ii//2)*(3*sz//4),(ii//2)*(3*sz//4)+sz//4])
+		quarters[ii] = new[yLim[0]:yLim[1],xLim[0]:xLim[1]]
+	edgePoints = np.zeros((4,3))
+	for ii in range(0,4):
+		xCoord = (ii%2)*(3*sz//4)+sz//8
+		yCoord = (ii//2)*(3*sz//4)+sz//8
+		value = np.mean(quarters[ii])#new[yCoord,xCoord]
+		edgePoints[ii] = np.array([xCoord,yCoord,value])
+	
+	vector1 = edgePoints[1]-edgePoints[0]
+	vector2 = edgePoints[2]-edgePoints[0]
+	point = edgePoints[2]
+	normal = np.cross(vector1,vector2)
+	plane = np.array([[point[2]+(normal[0]*point[0]+normal[1]*point[1]-normal[0]*jj-normal[1]*ii)/normal[2] for ii in range(sz)] for jj in range(sz)])
+	new-=plane
+	return new
+	
+def coarse_tilt(image):
+	sz = image.shape[0]
+	xMax = np.where(image==np.max(image))[1][0]
+	yMax = np.where(image==np.max(image))[0][0]
+	xShift = sz//2-xMax
+	yShift = sz//2-yMax
+	result = np.roll(np.roll(image,yShift,axis=0),xShift,axis=1)
+	return result
 def tilt(image):
 	"""Shift image so the maximum value is in the centre.
 	
@@ -111,6 +145,11 @@ def tilt(image):
 	rad = 3
 	sz = image.shape[0]
 	maxCoords = np.where(image==np.max(image))
+	maxRad = np.sqrt((maxCoords[0][0]-sz//2)**2+(maxCoords[1][0]-sz//2)**2)
+	while maxRad>sz//2-2*rad:
+		image[maxCoords[0][0],maxCoords[1][0]] = 0
+		maxCoords = np.where(image==np.max(image))
+		maxRad = np.sqrt((maxCoords[0][0]-sz//2)**2+(maxCoords[1][0]-sz//2)**2)
 	zoomIn = image[maxCoords[0][0]-rad:maxCoords[0][0]+rad,maxCoords[1][0]-rad:maxCoords[1][0]+rad]
 	newSize = zoomIn.shape[0]
 	x1 = np.linspace(0,newSize-1,newSize)
@@ -142,7 +181,7 @@ def normalise(array):
 	result = array/maxArray
 	return result
 	
-def weight_new(weights,stepsize):
+def weight_new(weights,stepsize,unused):
 	"""Create a new weight vector by adding a random number multiplied by adding
 	   a stepsize to each weight and normalising.
 	
@@ -152,6 +191,8 @@ def weight_new(weights,stepsize):
 	         The current weight vector.
 	stepsize: float
 	          The step size which is multiplied by the random number.
+	unused: array
+	        The indices of weights that stay zero.
 	
 	Returns
 	----------
@@ -160,7 +201,8 @@ def weight_new(weights,stepsize):
 	"""
 	new_weights = np.zeros(len(weights))
 	for kk in range(0,len(weights)):
-		new_weights[kk] = weights[kk]+stepsize*np.random.normal()
+		if not kk in unused:
+			new_weights[kk] = weights[kk]+stepsize*np.random.normal()
 		if new_weights[kk]<0:
 			new_weights[kk] = 0
 	new_weights/=np.sum(new_weights)
@@ -192,14 +234,18 @@ def interpolate(targets,PSFs,pas,maxIterations=10000,niter=200):
 	for nFrame in range(0,targets.shape[0]):
 		print(nFrame)
 		tgtIm = targets[nFrame]
+		tgtIm = coarse_tilt(tgtIm)
+		tgtIm = sub_background(tgtIm)
 		tgtIm = normalise(tgtIm)
+		tgtIm = tilt(tgtIm)
 		#Calculate which PSF gives the smallest chi2
 		chi2s = np.zeros(len(PSFs))
 		sz = PSFs.shape[1]
-		tgtIm = tilt(tgtIm)
 		for ii in range(0,len(chi2s)):
-			PSFs[ii] = tilt(PSFs[ii])
+			PSFs[ii] = coarse_tilt(PSFs[ii])
+			#PSFs[ii] = sub_background(PSFs[ii])
 			PSFs[ii] = normalise(PSFs[ii])
+			PSFs[ii] = tilt(PSFs[ii])
 			chi2s[ii] = np.sum(chiSquared(tgtIm,PSFs[ii]))
 
 		weights = np.zeros(len(PSFs))
@@ -217,13 +263,17 @@ def interpolate(targets,PSFs,pas,maxIterations=10000,niter=200):
 		plotVals = []
 		derivCombo = 0
 		stepCounter = 0
+		unused = chi2s.argsort()[-3:]
 		while burnedIn==0:
 			#Save the previous value of chi2
 			previousChi2 = currentChi2
 			#Calculate new weights and chi2
-			w_new = weight_new(weights,0.01)
+			w_new = weight_new(weights,0.01,unused)
 			combination = np.sum(w_new[kk]*PSFs[kk] for kk in range(0,len(w_new)))
-			combination = normalise(tilt(combination))
+			combination = coarse_tilt(combination)
+			#combination = sub_background(combination)
+			combination = normalise(combination)
+			combination = tilt(combination)
 			currentChi2 = chiSquared(tgtIm,combination)
 			allChis.append([weights,currentChi2])
 			#Check if chi2 has improved.  If it has, keep result.
@@ -233,7 +283,7 @@ def interpolate(targets,PSFs,pas,maxIterations=10000,niter=200):
 			else:
 				currentChi2 = previousChi2
 				stepCounter+=1
-			if stepCounter>=500 or ii>maxIterations:
+			if stepCounter>=300 or ii>maxIterations:
 				burnedIn = 1
 			plotVals.append(currentChi2)
 			ii+=1
@@ -242,9 +292,12 @@ def interpolate(targets,PSFs,pas,maxIterations=10000,niter=200):
 		#Continue iterating to get alternative values and contrast maps
 		for ii in range(0,niter):
 			previousChi2 = currentChi2
-			w_new = weight_new(weights,0.01)
+			w_new = weight_new(weights,0.01,unused)
 			combination = np.sum(w_new[kk]*PSFs[kk] for kk in range(0,len(w_new)))
-			combination = normalise(tilt(combination))
+			combination = coarse_tilt(combination)
+			#combination = sub_background(combination)
+			combination = normalise(combination)
+			combination = tilt(combination)
 			#Calculate contrast ratio
 			diff = tgtIm-combination
 			goodCrats[ii] = conv.cross_corr(combination,diff)

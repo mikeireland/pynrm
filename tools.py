@@ -1,38 +1,35 @@
-"""Generic useful tools"""
-from __future__ import division, print_function
 import numpy as np
 import pdb
-
 def subpixel_roll(im, roll_in_pix):
-    """
-    Parameters
-    ----------
-    im: numpy array
-        The input image (real)
-    roll_in_pix: numpy array(2)
-        Floating point amounts to shift in each direction.
-    
-    Returns
-    -------
-    shifted_im: numpy array
-        The shifted image.
-    """
-    #y and x in conventional screen plotting sense.
-    ny = im.shape[0]
-    nx = im.shape[1]
+	"""
+	Parameters
+	----------
+	im: numpy array
+		The input image (real)
+	roll_in_pix: numpy array(2)
+		Floating point amounts to shift in each direction.
 
-    #Create a Fourier domain y co-ordinate uv[0], and a Fourier domain x co-ordinate uv[1]
-    uv = np.meshgrid((((np.arange(ny) + ny//2) % ny) - ny//2)/ny, np.arange(nx//2 + 1)/nx, indexing='ij')
-    
-    #Fourier transform the image
-    ftim = np.fft.rfft2(im)
-    
-    #Now the magical Fourier shift, where convolution with a delta function is multiplication
-    #by a phase ramp in the Fourier domain.
-    ftim *= np.exp(-2j*np.pi*(uv[0]*roll_in_pix[0] + uv[1]*roll_in_pix[1]))
-    
-    #Return the inverse transform.
-    return np.fft.irfft2(ftim)
+	Returns
+	-------
+	shifted_im: numpy array
+		The shifted image.
+	"""
+	#y and x in conventional screen plotting sense.
+	ny = im.shape[0]
+	nx = im.shape[1]
+
+	#Create a Fourier domain y co-ordinate uv[0], and a Fourier domain x co-ordinate uv[1]
+	uv = np.meshgrid((((np.arange(ny) + ny//2) % ny) - ny//2)/ny, np.arange(nx//2 + 1)/nx, indexing='ij')
+
+	#Fourier transform the image
+	ftim = np.fft.rfft2(im)
+
+	#Now the magical Fourier shift, where convolution with a delta function is multiplication
+	#by a phase ramp in the Fourier domain.
+	ftim *= np.exp(-2j*np.pi*(uv[0]*roll_in_pix[0] + uv[1]*roll_in_pix[1]))
+
+	#Return the inverse transform.
+	return np.fft.irfft2(ftim)
 
 def filter_image(image):
         image1 = np.roll(image,1,0)

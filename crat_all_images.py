@@ -28,6 +28,10 @@ if sys.argv[2][0]=='/':
 	plotDir = sys.argv[2]
 else:
 	plotDir = os.getcwd()+'/'+sys.argv[2]
+	
+objDir = plotDir+'/'+objName
+if not os.path.isdir(objDir):
+	os.makedirs(objDir)
 outfiles = []
 #cycle through all existing data files
 for year in range(11,20):
@@ -262,7 +266,8 @@ crat_im = pyfits.getdata(crat_file)
 pas = pyfits.getdata(crat_file,1)['pa']
 #Take average over frames
 result = np.mean(crat_im,axis=0)
-newPA = np.mean(pas)
+oldSize = pyfits.getdata(tgt_cubes[0]).shape[1]
+"""newPA = np.mean(pas)
 #Set up rotation angle so image is approximately aligned
 #Make sure north is never more than 45 degrees from vertical
 newRot = newPA
@@ -281,11 +286,11 @@ result = nd.rotate(result,newRot,reshape=True)
 size = result.shape[0]
 sz = pyfits.getdata(tgt_cubes[0]).shape[1]
 #Resize the result so it is the same size as original image
-result = result[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
+result = result[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]"""
 #Store average plot in FITS file
 hdu = pyfits.PrimaryHDU(result)
-costerm = np.cos(np.radians(newRot))*0.01/3600.
-sinterm = np.sin(np.radians(newRot))*0.01/3600.
+#costerm = np.cos(np.radians(newRot))*0.01/3600.
+#sinterm = np.sin(np.radians(newRot))*0.01/3600.
 header = pyfits.getheader(tgt_cubes[0])
 hdu.header = header
 hdu.header['CRVAL1']=radec[0]
@@ -294,34 +299,34 @@ hdu.header['CTYPE1']='RA---TAN'
 hdu.header['CTYPE2']='DEC--TAN'
 hdu.header['CRPIX1']=sz//2
 hdu.header['CRPIX2']=sz//2
-hdu.header['CD1_1']=-costerm
-hdu.header['CD2_2']=costerm
-hdu.header['CD1_2']=sinterm
-hdu.header['CD2_1']=sinterm
+hdu.header['CD1_1']=-0.01/3600.
+hdu.header['CD2_2']=0.01/3600.
+hdu.header['CD1_2']=0
+hdu.header['CD2_1']=0
 hdu.header['OBJECT']=name
 #hdu.header['RADECSYS']='FK5'
 hdulist = pyfits.HDUList([hdu])
-hdulist.writeto(plotDir+'/ave_crat_'+objName+'.fits', clobber=True)
+hdulist.writeto(objDir+'/ave_crat_'+objName+'_'+str(oldSize)+'.fits', clobber=True)
 #Find weighted mean
 mean_im = stats.weighted_mean(crat_im)
 std_im = stats.bootstrap(crat_im,100)
 std_im[np.where(std_im==0)] = 1e9
 significance = mean_im/std_im
 
-mean_im = nd.rotate(mean_im,newRot,reshape=True)
+"""mean_im = nd.rotate(mean_im,newRot,reshape=True)
 size = mean_im.shape[0]
 mean_im = mean_im[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
-
+"""
 hdu2 = pyfits.PrimaryHDU(mean_im)
 hdu2.header = hdu.header
 hdulist = pyfits.HDUList([hdu2])
-hdulist.writeto(plotDir+'/weighted_mean_'+objName+'.fits', clobber=True)
-significance = nd.rotate(significance,newRot,reshape=True)
+hdulist.writeto(objDir+'/weighted_mean_'+objName+'_'+str(oldSize)+'.fits', clobber=True)
+"""significance = nd.rotate(significance,newRot,reshape=True)
 size = significance.shape[0]
-significance = significance[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]
+significance = significance[size//2-sz//2:size//2+sz//2,size//2-sz//2:size//2+sz//2]"""
 #significance[np.where(significance>100*np.median(significance))] = 0
 #significance[np.where(np.isnan(significance))] = 0
 hdu3 = pyfits.PrimaryHDU(significance)
 hdu3.header = hdu.header
 hdulist = pyfits.HDUList([hdu3])
-hdulist.writeto(plotDir+'/significance_'+objName+'.fits', clobber=True)
+hdulist.writeto(objDir+'/significance_'+objName+'_'+str(oldSize)+'.fits', clobber=True)

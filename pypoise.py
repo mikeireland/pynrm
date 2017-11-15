@@ -242,10 +242,10 @@ class PYPOISE():
             pmask[ww[0][badpmask],ww[1][badpmask]] = 0
             print("{0:d} low signal pupil positions eliminated.".format(len(badpmask)))
             #The next 2 lines are pretty useful for demonstrating how this works happens.
-            plt.clf()
+            """plt.clf()
             plt.imshow(pmask + oldpmask,interpolation='nearest')
             #plt.draw()
-            plt.pause(0.001)
+            plt.pause(0.001)"""
             #import pdb; pdb.set_trace()
             #plt.plot(nbadft,'o')
             #plt.semilogy(ps[ftpix]/RR[ftpix])
@@ -443,8 +443,8 @@ class PYPOISE():
         if use_powerspect and use_poise:
             ps_comb = np.zeros((nf,nps_comb))
             ps_comb_nonoise = np.zeros((nf_nonoise,nps_comb))
-        plt.clf()
-        plt.axis([0,len(ftpix[0]),-3,3])
+        """plt.clf()
+        plt.axis([0,len(ftpix[0]),-3,3])"""
         for i in range(nf):
             if (add_noise > 0):
                 im_raw = cube[i//add_noise,:,:]
@@ -471,16 +471,16 @@ class PYPOISE():
             #... and compute the phases.
             phases = np.angle(ftim[ftpix])
             #Need 3 plots here (phase, kernel-phase and calibrated power spectra)
-            plt.plot(phases,'.')
+            """plt.plot(phases,'.')
             plt.xlabel('Fourier Index')
-            plt.ylabel('Phase (radians) or Calibrated PS')
+            plt.ylabel('Phase (radians) or Calibrated PS')"""
             kp[i,:] = np.dot(ptok,phases)
             #If use_poise is set, then we need to subtract the calibrator kp
             if (use_poise):
                 kp[i,:] -= cal_kp
                 if use_powerspect:
                     ps[i,:] /= cal_ps
-                    plt.plot(ps[i,:], '.')
+                    #plt.plot(ps[i,:], '.')
                     ps_comb[i,:] = np.dot(ps_proj_matrix, ps[i,:]-1)
             if (add_noise > 0):
                 if (i % add_noise == 0):
@@ -492,10 +492,10 @@ class PYPOISE():
             if (i % 10 == 9):
                 print("Done file: " + str(i))
     #            plt.plot(kp[i,:])
-                plt.pause(0.001)
+                """plt.pause(0.001)
                 #plt.draw()
                 plt.clf()
-                plt.axis([0,len(ftpix[0]),-3,3])
+                plt.axis([0,len(ftpix[0]),-3,3])"""
             
         #Compute statistics, to save to the summary file. If use_poise is set, 
         #then we also need to add the systematic error component.
@@ -666,7 +666,7 @@ class PYPOISE():
         var_sys = np.maximum(D-var_internal,0)
     
         #Make a plot that shows these variances
-        plt.clf()
+        """plt.clf()
         plt.semilogy(D)
         plt.semilogy(var_internal)
         minvar = 1e-8
@@ -677,7 +677,7 @@ class PYPOISE():
         plt.ylabel('Variance')
         plt.title('Rejected Kernel-phases')
         plt.axis( (0,len(var_internal),minvar,np.max(D)) )
-        plt.show()
+        plt.show()"""
         print('Num Kernel-phases rejected for calibration: ' + str(len(bad)))
         print('Num Good Kernel-phases: ' + str(len(good)))
         print(V.shape)
@@ -694,11 +694,11 @@ class PYPOISE():
                 ft_temp = np.roll(ft_temp,ysz//2,axis=0)
                 delta_y = int(np.min([xsz*1.1,ysz//2]))
                 ft_temp = ft_temp[ysz//2-delta_y:ysz//2+delta_y,:]
-                plt.clf()
+                """plt.clf()
                 plt.imshow(ft_temp,interpolation='nearest')
                 plt.title('Bad kerphase ' + str(bad[i]))
                 print('Pausing 0.5 sec...')
-                plt.pause(0.5)
+                plt.pause(0.5)"""
                 #plt.draw()
         ptok_poise = ptok_poise[good,:]
         systematic = var_sys[good]
@@ -776,7 +776,7 @@ class PYPOISE():
             ps_proj_matrix = np.transpose(V)
         
             #Now display diagnostics.
-            plt.clf()
+            """plt.clf()
             plt.semilogy(D)
             plt.semilogy(var_internal)
             good = np.where(var_sys/var_internal < beta)[0]
@@ -785,7 +785,7 @@ class PYPOISE():
             plt.xlabel('Power Spectrum Number')
             plt.ylabel('Variance')
             plt.title('Rejected Power Spectrum combinations')
-            plt.show()
+            plt.show()"""
             print('Num Power Spectrum combinations rejected for calibration: ' + str(len(bad)))
             print('Num Good Power Spectrum combinations: ' + str(len(good)))
             print(V.shape)
@@ -803,10 +803,10 @@ class PYPOISE():
                     ft_temp = np.roll(ft_temp,ysz//2,axis=0)
                     delta_y = int(np.min([xsz*1.1,ysz//2]))
                     ft_temp = ft_temp[ysz//2-delta_y:ysz//2+delta_y,:]
-                    plt.clf()
+                    """plt.clf()
                     plt.imshow(ft_temp,interpolation='nearest')
                     plt.title('Bad power spectrum combination ' + str(bad[i]))
-                    plt.pause(0.001)
+                    plt.pause(0.001)"""
                     #plt.draw()
             ps_proj_matrix = ps_proj_matrix[good,:]
             ps_systematic = var_sys[good]
@@ -1032,7 +1032,7 @@ class PYPOISE():
     
         #Some plotting
         extent = [sz/2*pxscale,-sz/2*pxscale,-sz/2*pxscale,sz/2*pxscale]
-        plt.clf()
+        """plt.clf()
         plt.imshow(modified_chi2[::-1,:], interpolation='nearest', extent=extent)
         plt.axis(extent)
         plt.title('Chi^2 map for positive contrasts')
@@ -1044,7 +1044,7 @@ class PYPOISE():
         ax.arrow(-0.45*sz*pxscale, -0.45*sz*pxscale, 0, 0.1*sz*pxscale, head_width=0.02*sz*pxscale, head_length=0.02*sz*pxscale, fc='k', ec='k')
         plt.text(-0.45*sz*pxscale, -0.3*sz*pxscale,'N')
         plt.text(-0.3*sz*pxscale,-0.45*sz*pxscale, 'E')
-        plt.pause(0.001)
+        plt.pause(0.001)"""
         #plt.draw()
         print("sep, pa, contrast, sig: {0:6.2f} {1:6.2f} {2:6.2f} {3:6.2f}".format(sep, pa, contrast, crat_sig[min_ix[0], min_ix[1]]))
         return (sep,pa,contrast), crat, crat_sig, chi2, best_rchi2
@@ -1378,9 +1378,9 @@ if (0):
     im = np.zeros((128,128))
     for i in range(2896): 
         im += d['kp_mn'][i]*kp_implane[i,:,:]
-    plt.clf()
+    """plt.clf()
     plt.imshow(im[::-1,:], interpolation='nearest')
-    plt.title('Simplified reconstructed image (vertical reversed)')
+    plt.title('Simplified reconstructed image (vertical reversed)')"""
     
 if (0):
     #Now lets create a fake binary...
@@ -1398,9 +1398,9 @@ if (0):
     im = np.zeros((128,128))
     for i in range(2850): 
         im += d['kp_mn'][i]*kp_implane[i,:,:]
-    plt.clf()
+    """plt.clf()
     plt.imshow(im[::-1,:], interpolation='nearest')
-    plt.title('Simplified reconstructed image (vertical reversed)')
+    plt.title('Simplified reconstructed image (vertical reversed)')"""
 
 if (0):
 #    summary_file = 'fakebin_summary.fits'

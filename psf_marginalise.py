@@ -35,39 +35,6 @@ def optimize_tilt_derivative(p, mod_ft, im_ft, uv):
     retarray = np.array([complex_jac[0].real,complex_jac[0].imag,complex_jac[1].real,complex_jac[1].imag])
     return retarray.reshape( (2,2*np.prod(uv[0].shape)) )
 
-def make_uv_grid(sz, diam, wave, pscale):
-    """Helper function to make a 2D grid in the UV plane. 
-    
-    Parameters
-    ----------
-    sz: int
-        (square) array size in pixels
-        
-    diam: float
-        Telescope maximum diameter in m
-    
-    wave: float
-        Wavelength in m of the shortest wavelength in the filter.
-        
-    pscale: float
-        Pixel scale in arcsec/pix.
-    
-    Returns
-    -------
-    sampled_uv: Numpy array
-        The pixel coordinates in the 2D Fourier transform of the image.
-        
-    uv:
-        The Fourier coordinates of these sample points.
-    """
-    uv = np.meshgrid(2*np.pi*np.arange(sz//2 + 1)/float(sz),
-        2*np.pi*(((np.arange(sz) + sz//2) % sz) - sz//2)/float(sz))
-    
-    #A variable that is 2*pi for 1 cycle per pixel.
-    rr = np.sqrt(uv[0]**2 + uv[1]**2)
-    sampled_uv = np.where(rr < 2*np.pi*diam/wave*np.radians(pscale/3600.))
-    
-    return sampled_uv, np.array([uv[0][sampled_uv],uv[1][sampled_uv]])
 
 def optimize_tilt_function(p, mod_ft, im_ft, uv, return_model=False):
     """Helper function for optimize_tilt. This is used  as a function to
@@ -229,12 +196,20 @@ class Psfs(object):
                 psfs[i] -= np.median(psfs[i][outer_pix])
             psfs[i] /= np.sum(psfs[i])
         
+        uv = np.meshgrid(2*np.pi*np.arange(sz//2 + 1)/float(sz),
+            2*np.pi*(((np.arange(sz) + sz//2) % sz) - sz//2)/float(sz))
+        
+        #A variable that is 2*pi for 1 cycle per pixel.
+        rr = np.sqrt(uv[0]**2 + uv[1]**2)
+        sampled_uv = np.where(rr < 2*np.pi*diam/wave*np.radians(pscale/3600.))
+
         #While sampled_uv is an integer array of uv pixel coordinates, uv is an
         #array of Fourier frequency in inverse pixel units
-        self.sampled_uv, self.uv = make_uv_grid(sz, diam, wave, pscale)
+        self.sampled_uv = sampled_uv
+        self.uv = np.array([uv[0][sampled_uv],uv[1][sampled_uv]])
         
         psf_mn = np.sum(psfs,0)/psfs.shape[0]
-        psf_mn_ft = np.fft.rfft2(psf_mn)[self.sampled_uv]
+        psf_mn_ft = np.fft.rfft2(psf_mn)[sampled_uv]
         psf_fts = []
         #NB This should probably be run twice - once to get a better psf_mn_ft.
         corner_pix = np.where(1 - ot.circle(self.sz, self.sz))
@@ -784,8 +759,6 @@ class Target(object):
                 sampler.run_mcmc(p0,nchain)
                 init_lle_par.append(sampler.flatchain[np.argmax(sampler.flatlnprobability)])
                 print("Done initial model for chain {0:d}".format(j))
-                #if j==1:
-                #    import pdb; pdb.set_trace() #XXX
             init_lle_par = np.array(init_lle_par).flatten()
         
         #Minimum number of walkers
@@ -795,9 +768,6 @@ class Target(object):
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, threads=threads, kwargs=kwargs)
         else:
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob, kwargs=kwargs)
-            
-        #The initial probability from starting one at a time...
-        print("Initial lnprob: {0:5.2f}".format(self.lnprob(init_lle_par)))
             
         #Initialise the chain to random psfs.
         p0 = np.empty( (nwalkers, ndim) )

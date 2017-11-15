@@ -1,4 +1,4 @@
-"""NAOS-Conica specific methods and variables.
+"""NIRC2 specific methods and variables for an AOInstrument.
 """
 from __future__ import division, print_function
 import astropy.io.fits as pyfits
@@ -13,10 +13,11 @@ import time
 
 from aoinstrument import AOInstrument 
 
-class CONICA(AOInstrument):
- """The CONICA Class, that enables processing of CONICA images.
+class NIRC2(AOInstrument):
+ """The NIRC2 Class, that enables processing of NIRC2 images.
  """
- instrument = 'NAOS+CONICA' 
+ #A global definition, for error-checking downstream
+ instrument = 'NIRC2'    
  def is_bad_surrounded(self,bad):
     #Returns matrix of booleans showing which pixels are surrounded by bad pixels
     #"Surrounded" means there is at least one bad pixel in at least two directions
@@ -42,10 +43,11 @@ class CONICA(AOInstrument):
     is_surrounded[0:sz-numPixels,0:sz]+=is_bad_below
     is_surrounded = is_surrounded>2
     return is_surrounded
-    
- def saturated_pixels(self,image,header,threshold=7500):
+
+ def saturated_pixels(self,image,header,threshold=17500):
     """Returns coordinates of all saturated pixels
-    Uses image and header from file
+    Uses image (already corrected for nonlinearity) 
+    and header from file
     
     Parameters
     ----------
@@ -79,7 +81,7 @@ class CONICA(AOInstrument):
     codes = []
     for d in darks:
         codes.append(self.csv_dict['NAXIS1'][d] + self.csv_dict['NAXIS2'][d] + 
-            self.csv_dict['EXPTIME'][d] + self.csv_dict['COADDS'][d] + self.csv_dict['MULTISAM'][d])
+            self.csv_dict['ITIME'][d] + self.csv_dict['COADDS'][d] + self.csv_dict['MULTISAM'][d])
     codes = np.array(codes)
      #For each unique code, find all dark files and call make_dark.
     for c in np.unique(codes):
@@ -101,7 +103,7 @@ class CONICA(AOInstrument):
         print("Error: Run read_summary_csv first. No flats made.")
         return
     #Fill in elevation with a default value (45, for dome flat position) if there are fits header errors.
-    els = self.csv_dict['NAXIS1']
+    els = self.csv_dict['EL']
     for i in range(len(els)):
         try:
             this_el = float(els[i])
@@ -110,12 +112,13 @@ class CONICA(AOInstrument):
     els = els.astype(float)
     #If we're in the dome flat position with more than 1000 counts, this looks
     #like it could be a dome flat!
+    flats_maybe = np.where( (self.csv_dict['MEDIAN_VALUE'].astype('float') > 1000) & 
+                            (np.abs(els - 45) < 0.01) )[0]
     codes = []
-    flats_maybe = np.where(self.csv_dict['OBJECT']=='flats')[0]
     fluxes = self.csv_dict['MEDIAN_VALUE'][flats_maybe].astype(float)
     for ix in range(len(els)):
-        codes.append(self.csv_dict['ESO INS OPTI6 ID'][ix] + self.csv_dict['NAXIS1'][ix] + self.csv_dict['NAXIS2'][ix] + 
-            self.csv_dict['EXPTIME'][ix] + self.csv_dict['COADDS'][ix] + self.csv_dict['MULTISAM'][ix] + 
+        codes.append(self.csv_dict['FILTER'][ix] + self.csv_dict['NAXIS1'][ix] + self.csv_dict['NAXIS2'][ix] + 
+            self.csv_dict['ITIME'][ix] + self.csv_dict['COADDS'][ix] + self.csv_dict['MULTISAM'][ix] + 
             self.csv_dict['SLITNAME'][ix])
     codes = np.array(codes)
     flat_codes = codes[flats_maybe]
@@ -126,8 +129,8 @@ class CONICA(AOInstrument):
         #Flux has to be within 10% of the median to count.
         this_flat_flux = np.median(fluxes[w])
         good_flats = flats_maybe[w[np.where(np.abs( (fluxes[w] - this_flat_flux)/this_flat_flux < 0.1))[0]]]
-        #Less than 2 flats... don't bother.
-        if (len(good_flats) >= 2):
+        #Less than 5 flats... don't bother.
+        if (len(good_flats) >= 5):
             ffiles = [ddir + self.csv_dict['FILENAME'][ww] for ww in good_flats]
             lamp_off = np.where( (codes == c) & (np.array(self.csv_dict['MEDIAN_VALUE'].astype(float) < 600) & \
                     (np.abs(els - 45) < 0.01) ) )[0]
@@ -159,8 +162,8 @@ class CONICA(AOInstrument):
         print("Error: Run read_summary_csv first. No string returned.")
         return
     block_string = self.csv_dict['NAXIS1'][ix] + self.csv_dict['NAXIS2'][ix] + \
-        self.csv_dict['OBJECT'][ix] + self.csv_dict['ESO INS OPTI6 ID'][ix] + \
-        self.csv_dict['EXPTIME'][ix] + self.csv_dict['COADDS'][ix]
+        self.csv_dict['TARGNAME'][ix] + self.csv_dict['FILTER'][ix] + \
+        self.csv_dict['ITIME'][ix] + self.csv_dict['COADDS'][ix]
     return block_string
 
  def info_from_header(self, h, subarr=None):
@@ -176,7 +179,7 @@ class CONICA(AOInstrument):
     """
 
     #First, sanity check the header
-    try: inst=h['INSTRUME']
+    try: inst=h['CURRINST']
     except: inst=''
     if (len(inst)==0):
         print("Error: could not find instrument in header...")
@@ -185,40 +188,64 @@ class CONICA(AOInstrument):
         print("Error: software expecting: ", self.instrument, " but instrument is: ", inst)
         raise UserWarning
 
-    """try: fwo = h['FWONAME']
+    try: fwo = h['FWONAME']
     except:
-        print("No FWONAME in NACO header")
-        raise UserWarning"""
-    try: fwi = h['ESO INS OPTI6 ID']
+        print("No FWONAME in NIRC2 header")
+        raise UserWarning
+    try: fwi = h['FWINAME']
     except:
-        print("No FWINAME in NACO header")
+        print("No FWINAME in NIRC2 header")
         raise UserWarning
     try: slit = h['SLITNAME']
     except:
-        slit = 'none'
-        """print("No SLITNAME in NACO header")
-        raise UserWarning"""
-    if (fwi=='J'):
-        wave = 1.265e-6
-        filter='J'
+        print("No SLITNAME in NIRC2 header")
+        raise UserWarning
+
+    if (fwi=='Kp'):
+        wave = 2.12e-6
+        filter='Kp'
+    elif (fwi=='CH4_short'):
+        wave = 1.60e-6
+        filter='CH4_short'
+    elif (fwo=='Kcont'):
+        wave = 2.27e-6
+        filter='Kcont'
+    elif (fwi=='Lp'):
+        wave = 3.776e-6
+        filter='Lp'
+    elif (fwi=='H2O_ice'):
+        wave = 3.1e-6
+        filter='H2O_ice'
+    elif (fwo=='PAH'):
+        wave = 3.3e-6
+        filter='PAH'
+    elif (fwi=='Ms'):
+        wave = 4.67e-6
+        filter = 'Ms'
+    elif (fwi=='CH4_long'):
+        wave   = 1.68e-6
+        filter = 'CH4_long'
+    elif (fwi=='J'):
+        wave = 1.248e-6
+        filter = 'J'
+    elif (fwi=='z'):
+        wave   = 1.03e-6
+        filter = 'z'
+    elif (fwi=='Y'):
+        wave = 1.018e-6
+        filter = 'Y'
     elif (fwi=='H'):
-        wave = 1.66e-6
+        wave=1.633e-6
         filter='H'
-    elif (fwi=='Ks'):
-        wave = 2.18e-6
-        filter='Ks'
-    elif (fwi=='L_prime'):
-        wave = 3.8e-6
-        filter='L_prime'
-    elif (fwi=='M_prime'):
-        wave = 4.78e-6
-        filter='M_prime'
-    elif ('NB' in fwi or 'IB' in fwi):
-        wave = float(fwi[3:len(fwi)])*1e-6
-        filter = fwi
-    elif (fwi=='empty'):
-        wave = 5e-7
-        filter = 'empty'
+    elif (fwo=='Hcont'):
+        wave=1.5804e-6
+        filter='Hcont'
+    elif (fwo=='Br_alpha'):
+        wave=4.052e-6
+        filter='Br_alpha'
+    elif (fwo=='Bra_cont'):
+        wave=3.987e-6
+        filter='Bra_cont'
     else:
         print("Unknown Filter!")
         pdb.set_trace()
@@ -229,58 +256,80 @@ class CONICA(AOInstrument):
 
     try: camname = h['CAMNAME']
     except:
-           camname = 'narrow_VLT'
            print("No CAMNAME in header")
     if (camname == 'narrow'):
         #This comes from the Yelda (2010) paper.
          rad_pixel = 0.009952*(np.pi/180.0/3600.0)
-    elif (camname == 'narrow_VLT'):
-         rad_pixel = 0.03*(np.pi/180.0/3600.0)
     else:
         print("Unknown Camera!")
         raise UserWarning
     #Estimate the expected readout noise directly from the header.
-    """if h['SAMPMODE'] == 2:
+    if h['SAMPMODE'] == 2:
         multisam = 1
     else:
-        multisam = h['MULTISAM']"""
-    multisam = 1
-    #The next line comes from the NACO manual.
-    if fwi=='L_prime':
-        gain = 9.8
-    elif fwi=='M_prime':
-        gain = 9.0
-    else:
-        gain = 11.0
-    rnoise = 4.4
+        multisam = h['MULTISAM']
+    #The next line comes from the NIRC2 manual home page.
+    gain = 4.0
+    rnoise = 50.0/gain/np.sqrt(multisam)*np.sqrt(h['COADDS'])
     #Find the appropriate dark file if needed.
     dark_file = self.get_dark_filename(h)
-    targname = h['ESO OBS NAME']
+    if ( (h['OBSDNAME'] == 'sodiumDichroic') & (h['TARGNAME'][0:2] == 'tt')):
+        targname = h['OBJECT']
+    else:
+        targname = h['TARGNAME']
     #The pupil orientation...
     try:
-        el = h['ESO TEL ALT']
+        el = float(h['EL'])
     except:
         el = -1
     if (el > 0):
-        vertang_pa = (h['ESO ADA ABSROT START']+h['ESO ADA ABSROT END'])/2
-        altstart = 90-(180/np.pi)*np.arccos(1./h['ESO TEL AIRM START'])
-        altend = 90-(180/np.pi)*np.arccos(1./h['ESO TEL AIRM END'])
-        vertang_pa += (altstart+altend)/2
-        pa = vertang_pa-(180-(h['ESO TEL PARANG START']+h['ESO TEL PARANG END'])/2)
+        vertang_pa = h['ROTPPOSN']-h['EL']-h['INSTANGL'] 
+        pa = vertang_pa + h['PARANG']
     else:
         vertang_pa=np.NaN
         pa = np.NaN
     #Find the pupil type and parameters for the pupil...
     pupil_params=dict()
-    pupil_type = 'VLT'
-    pupil_params['mirror_size'] = 8.2
-    pupil_params['obstruction_size'] = 1.0
-    ftpix_file = 'ftpix_' + filter + '_fullpupil.fits'
-    if subarr:
-        subarr_string = '_' + str(subarr)
+    if (fwo == '9holeMsk'):
+        pupil_type = 'circ_nrm'
+        hole_xy = [[3.44,  4.57,  2.01,  0.20, -1.42, -3.19, -3.65, -3.15,  1.18],
+                   [-2.22, -1.00,  2.52,  4.09,  4.46,  0.48, -1.87, -3.46, -3.01]]
+        #For some reason... the y-axis is reversed, and we will transpose here
+        #to save any transposes later.
+        #NB as we aren't doing (u,v) coordinates but only chip coordinates here,
+        #there is no difference between reversing the x- and y- axes.
+        hole_xy = np.array(hole_xy)
+        hole_xy[1,:] = -hole_xy[1,:]
+        hole_xy = hole_xy[::-1,:]
+        pupil_params['hole_xy'] = hole_xy
+        pupil_params['hole_diam'] = 1.1
+        pupil_params['mask_rotation'] = -0.01
+        pupil_params['mask'] = 'g9'
+        if subarr:
+            subarr_string = '_' + str(subarr)
+        else:
+            subarr_string = ''
+        ftpix_file = 'ftpix_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
+    elif (fwi == '18holeMsk'):
+        pupil_type = 'circ_nrm'
+        pupil_params['mask'] = 'g18'
+        if subarr:
+            subarr_string = '_' + str(subarr)
+        else:
+            subarr_string = ''
+        ftpix_file = 'ftpix_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
+        print("Still to figure out 18 hole mask...")
+        raise UserWarning
     else:
-        subarr_string = ''
-    ftpix_file = 'ftpix_' + filter + '_fullpupil' + subarr_string + '.fits'
+        pupil_type = 'keck'
+        pupil_params['segment_size'] = 1.558
+        pupil_params['obstruction_size'] = 2.0 #Guessed
+        ftpix_file = 'ftpix_' + filter + '_fullpupil.fits'
+        if subarr:
+            subarr_string = '_' + str(subarr)
+        else:
+            subarr_string = ''
+        ftpix_file = 'ftpix_' + filter + '_fullpupil' + subarr_string + '.fits'
 #    else:
 #        print "Assuming full pupil..."
 #        pupil_type = 'annulus'
@@ -291,7 +340,7 @@ class CONICA(AOInstrument):
         'wave':wave, 'rad_pixel':rad_pixel,'targname':targname, 
         'pupil_type':pupil_type,'pupil_params':pupil_params,'ftpix_file':ftpix_file, 
         'gain':gain, 'rnoise':rnoise, 'vertang_pa':vertang_pa, 'pa':pa}
-        
+
  def get_dark_filename(self,h):
     """Create a dark fits filename based on a header
     
@@ -303,11 +352,15 @@ class CONICA(AOInstrument):
     -------
     dark_file: string
     """
-    dark_file = 'dark_' + str(h['NAXIS1']) + '_' + str(int(h['EXPTIME']*100)) + '.fits'
+    if h['SAMPMODE'] == 2:
+        multisam = 1
+    else:
+        multisam = h['MULTISAM']
+    dark_file = 'dark_' + str(h['NAXIS1']) +'_'+str(h['COADDS']) +'_' +str(multisam)+'_'+ str(int(h['ITIME']*100)) + '.fits'
     return dark_file
-    
- def destripe_conica(self,im, subtract_edge=True, subtract_median=False, do_destripe=True):
-    """Destripe an image from the NACO camera.
+
+ def destripe_nirc2(self,im, subtract_edge=True, subtract_median=False, do_destripe=True):
+    """Destripe an image from the NIRC2 camera.
     
     The algorithm is:
     1) Subtract the mode from each quadrant.
@@ -332,7 +385,6 @@ class CONICA(AOInstrument):
     s = im.shape
     quads = [im[0:s[0]//2,0:s[1]//2],im[s[0]:s[0]//2-1:-1,0:s[1]//2],
              im[0:s[0]//2,s[1]:s[1]//2-1:-1],im[s[0]:s[0]//2-1:-1,s[1]:s[1]//2-1:-1]]
-    #print(quads)
     quads = np.array(quads, dtype='float')
     #Work through the quadrants, modifying based on the edges.
     if subtract_edge:
@@ -405,7 +457,7 @@ class CONICA(AOInstrument):
         in_fits = pyfits.open(in_files[0]+'.gz', ignore_missing_end=True)
     h = in_fits[0].header
     instname = ''
-    try: instname=h['ESO INS ID']
+    try: instname=h['CURRINST']
     except:
         print("Unknown Header Type")
     #Create the output filename if needed
@@ -416,10 +468,11 @@ class CONICA(AOInstrument):
     darks = np.zeros((nf,s[0],s[1]))
     plt.clf()
     for i in range(nf):
-        #Read in the data
-        adark = pyfits.getdata(in_files[i])
-        if ('CONICA' in instname):
-            adark = self.destripe_conica(adark, subtract_median=subtract_median, do_destripe=destripe)
+        #Read in the data, linearizing as a matter of principle, and also because
+        #this routine is used for 
+        adark = self.linearize_nirc2(in_files[i])
+        if (instname == 'NIRC2'):
+            adark = self.destripe_nirc2(adark, subtract_median=subtract_median, do_destripe=destripe)
         if (subtract_median):
             plt.imshow(np.minimum(adark,1e2))
         else:
@@ -450,15 +503,66 @@ class CONICA(AOInstrument):
     hl = pyfits.HDUList()
     hl.append(pyfits.ImageHDU(med_dark,h))
     hl.append(pyfits.ImageHDU(np.uint8(bad)))
-    hl.writeto(rdir+out_file,output_verify='ignore',clobber=True)
-    """plt.figure(1)
+    hl.writeto(rdir+out_file,clobber=True)
+    plt.figure(1)
     plt.imshow(med_dark,cmap=cm.gray, interpolation='nearest')
     plt.title('Median Frame')
     plt.figure(2)
     plt.imshow(bad,cmap=cm.gray, interpolation='nearest')
     plt.title('Bad Pixels')
-    plt.pause(0.001)"""
+    plt.pause(0.001)
     #plt.draw()
+
+ def linearize_nirc2(self,in_file, out_file=''):
+    """Procedure to linearize NIRC2 (treated as a single detector).
+    Run on all images nominally before running anything else.
+    Originally from IDL code by Stan Metchev with Adam Kraus modifications.
+
+    Parameters
+    ----------
+    in_file: string
+        The input fits file
+    out_file: string, optional
+        An output fits file
+        
+    Returns
+    -------
+    im: (N,N) array
+        The linearized image.
+    
+    Notes
+    -----
+    This procedure takes COADDS into account, but does not take subreads into account.
+    i.e. in MCDS sampling, there is slightly more nonlinearity than accounted for, 
+    because the detector is more saturated by the time the last read is made.
+    """
+
+    coeff = np.array([1.001,-6.9e-6,-0.70e-10])
+    #Get key parameters from the header and get the data
+    try:
+        in_fits = pyfits.open(in_file, ignore_missing_end=True)
+    except:
+        in_fits = pyfits.open(in_file + '.gz', ignore_missing_end=True)
+    z = in_fits[0].header
+    fitsarr = in_fits[0].data
+    in_fits.close()
+    #See if we've already updated this header
+    try:
+        lindate = z['LINHIST']
+    except:
+        print('Linearizing: ' + in_file)
+        xsub=z['NAXIS1']
+        ysub=z['NAXIS2']
+        norm=np.array((xsub,ysub))
+        coadds = z['COADDS']
+        norm = coeff[0]+coeff[1]*fitsarr/coadds+coeff[2]*(fitsarr/coadds)**2
+        fitsarr = fitsarr / norm
+        z['LINHIST'] = time.asctime()
+        if (len(out_file) > 0):
+            hl = pyfits.HDUList()
+            hl.append(pyfits.ImageHDU(fitsarr,z))
+            hl.writeto(out_file,clobber=True)
+    return fitsarr
     
  def _calibration_subarr(self, rdir, flat_file, dark_file, szx, szy, wave=0):
     """A function designed to be used internally only, which chops out the central part
@@ -514,7 +618,7 @@ class CONICA(AOInstrument):
     else:
         dark = np.zeros((szy,szx))
     return (flat,dark,bad)
-    
+          
  def clean_no_dither(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
      subarr=None,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, ddir='', rdir='', cdir='', manual_click=False):
     """Clean a series of fits files, including: applying the dark, flat, 
@@ -550,6 +654,7 @@ class CONICA(AOInstrument):
     return self.clean_dithered(in_files, fmask_file=fmask_file,dark_file=dark_file, flat_file=flat_file, fmask=fmask,\
      subarr=subarr,extra_threshold=extra_threshold,out_file=out_file,median_cut=median_cut, destripe=destripe, \
      ddir=ddir, rdir=rdir, cdir=cdir, manual_click=manual_click, dither=False)
+    
     
  def clean_dithered(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
     subarr=None, extra_threshold=7,out_file='',median_cut=0.7, destripe=True, \
@@ -644,13 +749,13 @@ class CONICA(AOInstrument):
     wbad = np.where(bad)
     #Go through the files, cleaning them one at a time and adding to the cube. 
     pas = np.zeros(nf)
+    raoffs = np.zeros(nf)
+    decoffs = np.zeros(nf)
     decs = np.zeros(nf)
     maxs = np.zeros(nf)
     xpeaks = np.zeros(nf,dtype=int)
     ypeaks = np.zeros(nf,dtype=int)
     backgrounds = np.zeros(nf)
-    offXs = np.zeros(nf)
-    offYs = np.zeros(nf)
     for i in range(nf):
         #First, find the position angles from the header keywords. NB this is the Sky-PA of chip vertical.
         try:
@@ -659,24 +764,25 @@ class CONICA(AOInstrument):
             in_fits = pyfits.open(ddir + in_files[i] + '.gz', ignore_missing_end=True)
         hdr = in_fits[0].header
         in_fits.close()
-        rotstart=hdr['ESO ADA ABSROT START']
-        rotend=hdr['ESO ADA ABSROT END']
-        pastart=hdr['ESO TEL PARANG START']
-        paend=hdr['ESO TEL PARANG END']
-        alt=hdr['ESO TEL ALT']
-        instrument_offset= -0.55
-        pas[i]=(rotstart+rotend)/2.+alt-(180.-(pastart+paend)/2.) + instrument_offset
-        decs[i] = hdr['DEC']
-        offXs[i] = int(hdr['ESO SEQ CUMOFFSETX'])
-        offYs[i] = int(hdr['ESO SEQ CUMOFFSETY'])
-        #Read in the image
-        im = pyfits.getdata(ddir + in_files[i])
+        pas[i]=360.+hdr['PARANG']+hdr['ROTPPOSN']-hdr['EL']-hdr['INSTANGL'] 
+        raoffs[i]=hdr['RAOFF']
+        decoffs[i]=hdr['DECOFF']
+        decs[i]=hdr['DEC']
+        
+        #Read in the image - making a nonlinearity correction
+        im = self.linearize_nirc2(ddir + in_files[i])
         
         #Find saturated pixels and remove them.
         saturation = self.saturated_pixels(im,hdr)
         bad[saturation]=1
-        #surrounded = self.is_bad_surrounded(bad)
-        #bad+=surrounded
+        surrounded = self.is_bad_surrounded(bad)
+        bad+=surrounded
+        
+        #Destripe, then clean the data using the dark and the flat. This might change
+        #the background, so allow for this.
+        backgrounds[i] = np.median(im)
+        im = self.destripe_nirc2(im, do_destripe=destripe, subtract_median=subtract_median)
+        backgrounds[i] -= np.median(im)
         
         #!!! It is debatable whether the dark on the next line is really useful... but setting 
         #dark_file='' removes its effect.
@@ -695,35 +801,39 @@ class CONICA(AOInstrument):
     #offsets are removed in any case so this doesn't bias the data.
     for i in range(nf):
         full_cube[i,:,:] -= rough_supersky
-
+        
+    #Now the NIRC2-specific stuff... 
+    raoffs = raoffs - np.mean(raoffs)
+    decoffs = decoffs - np.mean(decoffs)
     shifts = np.zeros((nf,2),dtype=int)
     im_mean = np.zeros((szy, szx))
     for i in range(nf):
         th = np.radians(pas[i])
-        rot_mat = np.array([[np.cos(th), -np.sin(th)],[-np.sin(th), -np.cos(th)]])
-        shifts[i,:] = np.array([offXs[i],offYs[i]])#np.dot(rot_mat, np.array([offXs[i],offYs[i]]))
-        im_mean+=np.roll(np.roll(full_cube[i,:,:],-shifts[i,0], axis=1), -shifts[i,1], axis=0)
+        rot_mat = np.array([[np.cos(th), -np.sin(th)],[-np.sin(th), -np.cos(th)]]) 
+        shifts[i,:] = np.dot(rot_mat, np.radians(np.array([raoffs[i]*np.cos(np.radians(decs[i])), decoffs[i]]))/rad_pixel ).astype(int)
+        im_mean = im_mean + np.roll(np.roll(full_cube[i,:,:],-shifts[i,0], axis=1), -shifts[i,1], axis=0)
+        
     #Find the star...     
     #Show the image, y-axis reversed.
-    """plt.clf()
+    plt.clf()
     plt.imshow(np.arcsinh(im_mean/100), interpolation='nearest', origin='lower')
     arrow_xy = np.dot(rot_mat, [0,-30])
     plt.arrow(60,60,arrow_xy[0],arrow_xy[1],width=0.2)
     plt.text(60+1.3*arrow_xy[0], 60+1.3*arrow_xy[1], 'N')
     arrow_xy = np.dot(rot_mat, [-30,0])
     plt.arrow(60,60,arrow_xy[0],arrow_xy[1],width=0.2)
-    plt.text(60+1.3*arrow_xy[0], 60+1.3*arrow_xy[1], 'E')"""
+    plt.text(60+1.3*arrow_xy[0], 60+1.3*arrow_xy[1], 'E')
     if manual_click:
-        #plt.title('Click on target...')
+        plt.title('Click on target...')
         max_ix = plt.ginput(1, timeout=0)[0]
         #To match the (y,x) order below, change this...
         max_ix = int(max_ix[1]), int(max_ix[0])
     else:
         im_filt = nd.filters.median_filter(im_mean,size=5)
         max_ix = np.unravel_index(im_filt.argmax(), im_filt.shape)
-        #plt.title('Identified target shown')
-    """plt.plot(max_ix[1], max_ix[0], 'wx', markersize=20,markeredgewidth=2)
-    plt.pause(0.001)"""
+        plt.title('Identified target shown')
+    plt.plot(max_ix[1], max_ix[0], 'wx', markersize=20,markeredgewidth=2)
+    plt.pause(0.001)
     #plt.draw()
     print("Maximum x,y: " + str(max_ix[1])+', '+ str(max_ix[0]))
     time.sleep(show_wait)
@@ -770,10 +880,10 @@ class CONICA(AOInstrument):
         subbad = subbad[0:subarr,0:subarr]
         new_bad = subbad.copy()    
         subim[np.where(subbad)] = 0
-        """plt.clf()
+        plt.clf()
         plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
         plt.title(hinfo['targname']) 
-        plt.pause(0.001)"""
+        plt.pause(0.001)
         #import pdb; pdb.set_trace()
         #plt.draw()
         #Iteratively fix the bad pixels and look for more bad pixels...
@@ -813,11 +923,11 @@ class CONICA(AOInstrument):
             #TESTING - too many bad pixels are identified in L' data, and noise isn't 
             #consistent.
             if extra_diagnostic_plots:
-                """plt.clf()
+                plt.clf()
                 plt.imshow(np.maximum(subim,0)**0.5, interpolation='nearest', cmap=cm.cubehelix)
                 new_bad_yx = np.where(new_bad)
                 plt.plot(new_bad_yx[1], new_bad_yx[0], 'wx')
-                plt.axis([0,subarr,0,subarr])"""
+                plt.axis([0,128,0,128])
                 import pdb; pdb.set_trace()
             
             subbad += extra_bad
@@ -832,9 +942,10 @@ class CONICA(AOInstrument):
         
         #Now re-correct both the known and new bad pixels at once.
         self.fix_bad_pixels(subim,subbad,fmask)
-        """plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
-        plt.pause(0.001)"""
+        plt.imshow(np.maximum(subim,0)**0.5,interpolation='nearest')
+        plt.pause(0.001)
         #plt.draw()
+        
         #Save the data and move on!
         cube[i]=subim
         subbad = subbad>0
@@ -844,7 +955,7 @@ class CONICA(AOInstrument):
     good = np.where(maxs > median_cut*np.median(maxs))
     good = good[0]
     if (len(good) < nf):
-        print(nf-len(good), " frames rejected due to low peak counts.")
+        print(nf-len(good), "  frames rejected due to low peak counts.")
     cube = cube[good,:,:]
     nf = np.shape(cube)[0]
     #If a filename is given, save the file.
@@ -852,6 +963,7 @@ class CONICA(AOInstrument):
         hl = pyfits.HDUList()
         h['RNOISE'] = rnoise
         h['PGAIN'] = gain #P means python
+#        h['PFILTER'] = !!! Not complete !!!
         h['SZX'] = szx
         h['SZY'] = szy
         h['DDIR'] = ddir
@@ -870,6 +982,28 @@ class CONICA(AOInstrument):
         cols = pyfits.ColDefs([col1,col2,col3,col4,col5])
         hl.append(pyfits.BinTableHDU.from_columns(cols))
         hl.append(pyfits.ImageHDU(bad_cube))
-        hl.writeto(cdir+out_file,output_verify='ignore',clobber=True)
+        hl.writeto(cdir+out_file,clobber=True)
         print(cube.shape)
     return cube
+    
+
+if(0):
+    n2 = NIRC2()
+
+#Testing destripe only.
+if (0):
+    f = pyfits.open(file, ignore_missing_end=True)
+    im = f[0].data
+    f.close()
+    plt.imshow(np.minimum(np.maximum(n2.destripe_nirc2(im),-50),50), interpolation='nearest', cmap=cm.gray)
+    f.close()
+
+#Testing darks and flats.
+if (0):
+    dir =  '/Users/mireland/data/nirc2/131115/n'
+    extn = '.fits.gz'
+    files = [(dir + '{0:04d}' + extn).format(i) for i in range(40,45)]
+    #files.extend([(dir + '{0:04d}' + extn).format(i) for i in range(56,61)])
+    n2.make_dark(files,'dark.fits')
+    files = [(dir + '{0:04d}' + extn).format(i) for i in range(29,40)]
+    n2.make_flat(files,'dark.fits','flat.fits')
