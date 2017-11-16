@@ -272,9 +272,11 @@ class CONICA(AOInstrument):
         pa = np.NaN
     #Find the pupil type and parameters for the pupil...
     pupil_params=dict()
-    pupil_type = 'VLT'
-    pupil_params['mirror_size'] = 8.2
-    pupil_params['obstruction_size'] = 1.0
+    pupil_type = 'annulus'
+    pupil_params['outer_diam'] = 8.2
+    #Secondary obstruction guesstimated form picture on ESO webpage.
+    pupil_params['inner_diam'] = 1.5
+
     ftpix_file = 'ftpix_' + filter + '_fullpupil.fits'
     if subarr:
         subarr_string = '_' + str(subarr)

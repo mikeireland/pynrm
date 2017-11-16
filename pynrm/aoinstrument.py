@@ -36,7 +36,7 @@ class AOInstrument:
         raise UserWarning
     r = csv.DictReader(f, delimiter=',')
     #Read first line to initiate the dictionary
-    line = r.next()
+    line = next(r)
     d = dict()
     for k in line.keys():
         d[k] = [line[k]]
@@ -101,7 +101,7 @@ class AOInstrument:
         in_fits.close()
         darks[i,:,:] = adark
     med_dark = np.median(darks, axis=0)
-    pyfits.writeto(rdir + out_file,med_dark)
+    pyfits.writeto(rdir + out_file, med_dark, output_verify='ignore')
     
  def info_from_header(self, h):
     """Find important information from the fits header and store in a common format
@@ -181,11 +181,36 @@ class AOInstrument:
     #Add a wavelength to the header
     h['WAVE'] = hinfo['wave']
     if (dark_file ==''):
-        dark_file=self.get_dark_filename(h)
+        dark_file=self.get_dark_filename(h)    
+
+    #FIXME: A hack if get_dark_filename returns a non existant file.
+    #FIXME: This should be incorporated into get_dark_filename if it is necessary, or
+    # otherwise give an error.
+    if not os.path.isfile(rdir + dark_file):
+        allDarks = [f for f in os.listdir(rdir) if 'dark' in f]
+        if 'EXPTIME' in h.keys():
+            exptime = h['EXPTIME']*100
+        elif 'ITIME' in h.keys():
+            exptime = h['ITIME']*100
+        allTimes = []
+        for ii in range(len(allDarks)):
+            count = 0
+            for jj in range(len(allDarks[ii])):
+                if allDarks[ii][jj]=='_':
+                    count+=1
+                    if count==2:
+                        index = jj+1
+            allTimes.append(int(allDarks[ii][index:allDarks[ii].find('.fits')]))
+        allTimes = np.array(allTimes)
+        diffTimes = abs(allTimes-exptime)
+        dark_file = allDarks[np.argmin(diffTimes)]
+
+    #Subtract the dark and normalise the flat.
     flat = pyfits.getdata(rdir + out_file,0) - pyfits.getdata(rdir + dark_file,0)
     bad = np.logical_or(pyfits.getdata(rdir + out_file,1),pyfits.getdata(rdir + dark_file,1))
     flat[np.where(bad)] = np.median(flat)
     flat /= np.median(flat)
+
     #Write this to a file
     hl = pyfits.HDUList()
     hl.append(pyfits.ImageHDU(flat,h))

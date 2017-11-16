@@ -44,7 +44,7 @@ class NIRC2(AOInstrument):
     is_surrounded = is_surrounded>2
     return is_surrounded
 
- def saturated_pixels(self,image,header, threshold=17500):
+ def saturated_pixels(self, image, header, threshold=17500):
     """Returns coordinates of all saturated pixels
     Uses image (already corrected for nonlinearity) 
     and header from file
@@ -313,7 +313,8 @@ class NIRC2(AOInstrument):
             subarr_string = '_' + str(subarr)
         else:
             subarr_string = ''
-        ftpix_file = 'ftpix_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
+        fourier_mask_file = 'fmask_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
+        kernel_defn_file = 'kernel_' + filter + '_'+ pupil_params['mask'] + subarr_string + '.fits'
     elif (fwi == '18holeMsk'):
         pupil_type = 'circ_nrm'
         pupil_params['mask'] = 'g18'
@@ -323,7 +324,8 @@ class NIRC2(AOInstrument):
         pupil_type = 'keck'
         pupil_params['segment_size'] = 1.558
         pupil_params['obstruction_size'] = 2.0 #Guessed
-        ftpix_file = 'ftpix_' + filter + '_fullpupil.fits'
+        fourier_mask_file = 'fmask_' + filter + '_fullpupil.fits'
+        kernel_defn_file = 'kernel_' + filter + '_fullpupil.fits'
 #    else:
 #        print "Assuming full pupil..."
 #        pupil_type = 'annulus'
@@ -332,7 +334,8 @@ class NIRC2(AOInstrument):
 #        ftpix_file = 'ftpix_' + filter + '_fullpupil.fits'
     return {'dark_file':dark_file, 'flat_file':flat_file, 'filter':filter, 
         'wave':wave, 'rad_pixel':rad_pixel,'targname':targname, 
-        'pupil_type':pupil_type,'pupil_params':pupil_params,'ftpix_file':ftpix_file, 
+        'pupil_type':pupil_type,'pupil_params':pupil_params,
+        'fourier_mask_file':fourier_mask_file, 'kernel_defn_file':kernel_defn_file, 
         'gain':gain, 'rnoise':rnoise, 'vertang_pa':vertang_pa, 'pa':pa}
 
  def get_dark_filename(self,h):
@@ -614,7 +617,8 @@ class NIRC2(AOInstrument):
     return (flat,dark,bad)
           
  def clean_no_dither(self, in_files, fmask_file='',dark_file='', flat_file='', fmask=[],\
-     subarr=128,extra_threshold=7,out_file='',median_cut=0.7, destripe=True, ddir='', rdir='', cdir='', manual_click=False):
+     subarr=128, extra_threshold=7, out_file='', median_cut=0.7, destripe=True, ddir='', \
+     rdir='', cdir='', manual_click=False):
     """Clean a series of fits files, including: applying the dark, flat, 
     removing bad pixels and cosmic rays. This can also be used for dithered data, 
     but it will not subtract the dithered positions. There reason for two separate
@@ -633,7 +637,7 @@ class NIRC2(AOInstrument):
         The pixels in the data's Fourier Transform that include all non-zero
         values (created using pupil_sampling)
     subarr: int, optional
-        The width of the subarray.
+        The width of the subarray. Defaults to 128 for speed.
     extra_threshold: float, optional
         A threshold for identifying additional bad pixels and cosmic rays.
     outfile: string,optional
@@ -666,8 +670,8 @@ class NIRC2(AOInstrument):
     ----------
     in_files : array_like (dtype=string). 
         A list if input filenames.
-    fmask_file: string
-        The Fourier mask and ftpix fits file - input either this or ftpix and subarr
+    fourier_mask_file: string
+        The Fourier mask file - input either this or fmask and subarr
     dark_file: string
         The dark file, previously created with make_dark
     flat_file: string
@@ -975,7 +979,7 @@ class NIRC2(AOInstrument):
         col4 = pyfits.Column(name='max', format='E', array=maxs)
         col5 = pyfits.Column(name='background', format='E', array=backgrounds)
         cols = pyfits.ColDefs([col1, col2,col3,col4,col5])
-        hl.append(pyfits.new_table(cols))
+        hl.append(pyfits.BinTableHDU.from_columns(cols))
         hl.append(pyfits.ImageHDU(bad_cube))
         hl.writeto(cdir+out_file,clobber=True)
     return cube

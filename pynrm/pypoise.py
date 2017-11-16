@@ -13,7 +13,19 @@ import pdb
 import glob
 import os
 plt.ion()
-    
+
+def AfromAA(AA, ftpix):
+    """Convenience function to create the pupil to Fourier plane matrix."""
+    npsi = AA.shape[2]
+    #Now convert to 1D quantities, indexed by the number of non-zero Fourier points, nphi
+    nphi = len(ftpix[0])
+    A = np.zeros((nphi,npsi),dtype='int')
+    one_ix = np.ones(nphi,dtype='int')
+    #Extend the ftpix index to include each of the psi variables, one at a time.
+    for j in range(0,npsi):
+        A[:,j] = AA[ftpix + (j*one_ix,)] 
+    return A
+
 class PYPOISE():
     """The PYPOISE Class, that enables the POISE algorithm.
     The class must be constructed with an AO instrument. """
@@ -52,6 +64,8 @@ class PYPOISE():
             for j in range(i+1,npsi):
                 dx = ww[0][j]-ww[0][i]+subarr//2
                 dy = ww[1][j]-ww[1][i]+subarr//2
+                if dx>=subarr or dy>=subarr or dx<0 or dy<0:
+                    raise UserWarning("The pupil plane mask must be less than half of subarr for Nyquist sampling!")
                 AA[dy,dx,j] += 1
                 AA[dy,dx,i] -= 1
                 RR[dy,dx] += 1
@@ -60,22 +74,29 @@ class PYPOISE():
         ftpix = np.where(RR)
         return RR,AA,ftpix
 
-    def pupil_sampling(self,in_files, subarr=128, ignore_data=False, ignore_dark=False, 
-        dark_file='', flat_file='', out_file='', rdir='', ddir='', 
-        destripe=False, dither=False):
+    def pupil_sampling(self,in_cube_fn='', in_header='', subarr=128, ignore_data=False, 
+        ignore_dark=False, dark_file='', flat_file='', fourier_mask_file='', 
+        kernel_defn_file='', rdir='', ddir='', destripe=False, dither=False,
+        old_method=True):
         """Define the Fourier-Plane sampling based on Pupil geometry
     
         This function finds the pupil sampling and the matrix that maps phase to 
-        closure-quantities, i.e. kernel-phases.
+        closure-quantities, i.e. kernel-phases. A cleaned cube is input. Note that this
+        has to have been created with a Fourier mask file created using this routine
+        without an in_cube, but with a header input from data.
     
         Parameters
         ----------
+        in_cube: 
         h : A fits header dictionary-like structure returned from pyfits or
             astropy.io.fits. Must be from a known camera in a known mode.
         subarr : int
             The sub-array size 
         ignore_data : bool
             Whether to ignore the data in finding the precise Fourier sampling.
+        old_method: bool
+            The original method for removing low SNR positions in the pupil plane was to
+            modify pmask. This old code is retained under this switch for testing only.
     
         Returns
         -------
@@ -89,13 +110,14 @@ class PYPOISE():
             rdir = self.aoinst.rdir
         if (ddir == ''):
             ddir = self.aoinst.ddir
-        try:
-            in_fits = pyfits.open(ddir + in_files[0], ignore_missing_end=True)
-        except:
-            in_fits = pyfits.open(ddir + in_files[0] + '.gz', ignore_missing_end=True)
-        h = in_fits[0].header
-        in_fits.close()
-
+        if len(in_cube_fn)>0:
+            h = pyfits.getheader(self.aoinst.cdir + in_cube_fn)
+        else:
+            h = in_header
+        
+        #If we are passing a cube, get the subarray size directly from it.
+        if len(in_cube_fn)>0:
+            subarr=h['NAXIS1']
         #Based on which telescope is in use, decide on the mask and wavelength.
         hinfo = self.aoinst.info_from_header(h, subarr=subarr)
         wave = hinfo['wave']
@@ -105,9 +127,11 @@ class PYPOISE():
         print("Using Dark file: " + dark_file)
         if (len(flat_file) == 0):
             flat_file = hinfo['flat_file']
-        #Fill in the filename...
-        if (out_file == ''):
-            out_file = hinfo['ftpix_file']
+        #Fill in the filenames...
+        if (fourier_mask_file == ''):
+            fourier_mask_file = hinfo['fourier_mask_file']
+        if (kernel_defn_file == ''):
+            kernel_defn_file = hinfo['kernel_defn_file']
         print("Using Flat file: " + flat_file)
         #Short-hand
         p = hinfo['pupil_params']
@@ -140,20 +164,25 @@ class PYPOISE():
             inner_diam = p['inner_diam']
             badpmask_threshold = 0.4
             lowps_threshold=0.1 #Some tweaking needed !!! Was 0.05
-            nbad_threshold = 12
+            nbad_threshold = 8
             pmask += ( ix[0]**2 + ix[1]**2 < (outer_diam/wave*rad_pixel*subarr/2.0)**2 )
             pmask_bighole += ( ix[0]**2 + ix[1]**2 < (1.1*outer_diam/wave*rad_pixel*subarr/2.0)**2 )
             pmask -= ( ix[0]**2 + ix[1]**2 < (inner_diam/wave*rad_pixel*subarr/2.0)**2 )
             pmask_bighole -= ( ix[0]**2 + ix[1]**2 < (inner_diam/wave*rad_pixel*subarr/2.0)**2 )
+            #FIXME: Check this from Alex
+            #pmask += (ix[0]**2+ix[1]**2<(outer_diam/2.0)**2)
+            #pmask *= (ix[0]**2+ix[1]**2>(inner_diam/2.0)**2)
+            #pmask = np.minimum(pmask,1)
+            #pmask_bighole = pmask
         elif (hinfo['pupil_type'] == 'keck'):
             print("Using Keck pupil")
             badpmask_threshold = 0.4
             lowps_threshold = 0.1
             nbad_threshold = 4
             #This is a special pupil geometry for Keck, consisting of lots of hexagons.
-            hex = self.aoinst.hexagon( subarr, np.ceil(p['segment_size']/wave*rad_pixel*subarr))
-            ys = p['segment_size']/wave*rad_pixel*subarr
-            xs = p['segment_size']/wave*rad_pixel*subarr*np.sqrt(3)/2.0
+            hex = self.aoinst.hexagon( subarr, np.ceil(p['segment_size']/wave*rad_pixel*subarr)) #!!! Need to fix opticstools
+            ys = p['segment_size']/wave*rad_pixel*subarr*2
+            xs = p['segment_size']/wave*rad_pixel*subarr*np.sqrt(3)/2.0*2
             p4 = nd.interpolation.shift(hex,(0,-1.5*ys),order=1) + nd.interpolation.shift(hex,(0,-0.5*ys),order=1) + \
                  nd.interpolation.shift(hex,(0,0.5*ys),order=1) + nd.interpolation.shift(hex,(0,1.5*ys),order=1)
             p5 = nd.interpolation.shift(hex,(0,-2*ys),order=1) + nd.interpolation.shift(hex,(0,ys),order=1) + \
@@ -164,6 +193,7 @@ class PYPOISE():
                 nd.interpolation.shift(hex,(-xs,2.5*ys),order=1)+nd.interpolation.shift(hex,(-xs,-2.5*ys),order=1) + \
                 nd.interpolation.shift(hex,(xs,2.5*ys),order=1)+nd.interpolation.shift(hex,(xs,-2.5*ys),order=1) + \
                 nd.interpolation.shift(hex,(0,-3*ys),order=1)+ nd.interpolation.shift(hex,(0,3*ys),order=1)
+            import pdb; pdb.set_trace()
             pmask *= (1 - self.aoinst.hexagon(subarr, np.ceil(p['obstruction_size']/wave*rad_pixel*subarr)))
             pmask = np.minimum(pmask,1)
             #Next rotate 
@@ -173,34 +203,31 @@ class PYPOISE():
             pmask = nd.interpolation.rotate(pmask,-hinfo['vertang_pa'],order=1,reshape=False)
             pmask = pmask > 0.75
             pmask_bighole = pmask > 0.1
+            
 
         #Now, we create the pupil to kernel-phase array from this pupil mask.
         #Start with intrinsically 2D quantities, and the bighole version first
         RR_bighole,AA_bighole,ftpix_bighole = self.pmask_to_ft(pmask_bighole)
+
         #Create the Fourier transform mask for bad pixel rejection and bias
         #subtraction. It looks a little complex because we are using rfft2 to 
         #save time.
-        fmask = np.ones((subarr,subarr/2+1),dtype='int')
+        fmask = np.ones((subarr,subarr//2+1),dtype='int')
         fmask[ftpix_bighole] = 0
         #Even though we're in half the Fourier plane, there are some doubled-up pixels.
         fmask[:,0] *= np.roll(fmask[::-1,0],1)
         fmask[0,0]=0
+
         #Now the normal version. 
         RR,AA,ftpix = self.pmask_to_ft(pmask)
+        A = AfromAA(AA, ftpix)
         npsi = AA.shape[2]
         ww = np.where(pmask)
         #We can now compute ftpix,then tweak the pmask to match the actual Fourier
         #power
-        if not ignore_data:
-            print("Cleaning data...")
-            if ignore_dark:
-                dark_file=''
-            if dither:
-                cube = self.aoinst.clean_dithered(in_files, dark_file=dark_file, flat_file=flat_file,
-                    fmask=fmask, subarr=subarr, destripe=destripe, ddir='', rdir='')
-            else:
-                cube = self.aoinst.clean_no_dither(in_files, dark_file=dark_file, flat_file=flat_file,
-                    fmask=fmask, subarr=subarr, destripe=destripe, ddir='', rdir='')
+        if not ignore_data and len(in_cube_fn)>0:
+            #Read in the data
+            cube = pyfits.getdata(in_cube_fn)
             for i in range(cube.shape[0]):
                 ftim = self.aoinst.shift_and_ft(cube[i])
                 if (i == 0):
@@ -212,6 +239,7 @@ class PYPOISE():
             print("Looking for low Fourier power")
             ps -= np.mean(ps[np.where(fmask)])
             phases = np.angle(ftim_sum)
+            
             #We now find any power spectrum values that are unusually low, or any phases
             #that are unusually high.
             medrat = np.median(ps[ftpix]/RR[ftpix]**2)
@@ -220,19 +248,29 @@ class PYPOISE():
                 np.logical_and(ps[ftpix]/RR[ftpix]**2/medrat < badpmask_threshold,ps[ftpix]/medps < lowps_threshold)) )
             badft = badft[0]        
             print("{0:d} Fourier positions of low power identified".format(len(badft)))
-            nbadft = np.zeros(npsi)
-            some_ones = np.ones(len(badft),dtype='int')
-            for i in range(0,npsi):
-                nbadft[i] = np.sum(np.abs(AA[(ftpix[0][badft],ftpix[1][badft],i*some_ones)]))
-            badpmask = np.where(nbadft > nbad_threshold)[0]
-            oldpmask = pmask.copy()
-            pmask[ww[0][badpmask],ww[1][badpmask]] = 0
-            print("{0:d} low signal pupil positions eliminated.".format(len(badpmask)))
-            #The next 2 lines are pretty useful for demonstrating how this works happens.
-            plt.clf()
-            plt.imshow(pmask + oldpmask,interpolation='nearest')
-            #plt.draw()
-            plt.pause(0.001)
+            import pdb; pdb.set_trace()
+            if old_method:
+                nbadft = np.zeros(npsi)
+                some_ones = np.ones(len(badft),dtype='int')
+                for i in range(0,npsi):
+                    nbadft[i] = np.sum(np.abs(AA[(ftpix[0][badft],ftpix[1][badft],i*some_ones)]))
+                badpmask = np.where(nbadft > nbad_threshold)[0]
+                oldpmask = pmask.copy()
+                pmask[ww[0][badpmask],ww[1][badpmask]] = 0
+                print("{0:d} low signal pupil positions eliminated.".format(len(badpmask)))
+                #The next 2 lines are pretty useful for demonstrating how this works happens.
+                plt.clf()
+                plt.imshow(pmask + oldpmask,interpolation='nearest')
+                #plt.draw()
+                plt.pause(0.001)
+                #With a (potentially) updated pmask, re-compute the ftpix variables
+                RR,AA,ftpix = self.pmask_to_ft(pmask)
+                A = AfromAA(AA, ftpix)
+            else:
+                #Now lets just get rid of these badft rots of A!
+                import pdb; pdb.set_trace()
+                          
+        
             #import pdb; pdb.set_trace()
             #plt.plot(nbadft,'o')
             #plt.semilogy(ps[ftpix]/RR[ftpix])
@@ -241,17 +279,7 @@ class PYPOISE():
             #mask[ftpix]=1
             #plt.imshow( (mask*np.maximum(ps,0)/np.maximum(RRsmall,0.01)**2)**0.3, interpolation='nearest') 
             #raise UserWarning
-        #With a (potentially) updated pmask, re-compute the ftpix variables
-        RR,AA,ftpix = self.pmask_to_ft(pmask)
-        npsi = AA.shape[2]
-        #Now convert to 1D quantities, indexed by the number of non-zero Fourier points, nphi
-        nphi = len(ftpix[0])
-        A = np.zeros((nphi,npsi),dtype='int')
-        one_ix = np.ones(nphi,dtype='int')
-        #Extend the ftpix index to include each of the psi variables, one at a time.
-        for j in range(0,npsi):
-            A[:,j] = AA[ftpix + (j*one_ix,)]
-
+        
         #At this point, we have:
         #R: The reduncancy vector
         #xf: The x Fourier component.
@@ -273,38 +301,53 @@ class PYPOISE():
 
         ptok = np.transpose(U[:,len(W):])
 
+        header = pyfits.Header()
+        header['GRID'] = True
+        header['SCALE'] = wave/(subarr*rad_pixel)
+        header['PWAVE'] = wave 
+        header['TARGNAME'] = hinfo['targname']
+        header['RAD_PIX'] = rad_pixel
+        header['SUBARR'] = subarr
+        header['DARK'] = dark_file
+        header['FLAT'] = flat_file
+        header['PFILTER'] = hinfo['filter']
+        header['PUPTYPE'] = hinfo['pupil_type']
+        if(hinfo['pupil_type'] == 'circ_nrm'):
+            header['PMASK'] = p['mask']
+        header['DDIR'] = ddir
+        if len(in_cube_fn)>0:
+            header['HISTORY'] = 'Input: ' + in_cube_fn
+
         #If a savefile name is given, save the file!
-        if (len(out_file) > 0):
+        if (len(fourier_mask_file) > 0):
             hl = pyfits.HDUList()
-            header = pyfits.Header()
-            header['RAD_PIX'] = rad_pixel
-            header['SUBARR'] = subarr
-            header['TARGNAME'] = hinfo['targname']
-            header['DARK'] = dark_file
-            header['FLAT'] = flat_file
-            header['PFILTER'] = hinfo['filter']
-            header['PWAVE'] = wave 
-            header['PUPTYPE'] = hinfo['pupil_type']
-            if(hinfo['pupil_type'] == 'circ_nrm'):
-                header['PMASK'] = p['mask']
-            header['DDIR'] = ddir
-            for i in range(len(in_files)):
-                header['HISTORY'] = 'Input: ' + in_files[i]
+            hl.append(pyfits.ImageHDU(fmask, header))
+            hl.writeto(rdir + out_file,clobber=True)
+
+        if (len(kernel_defn_file) > 0):
+            hl = pyfits.HDUList()
+            col1 = pyfits.Column(name='u', format='I', array=(ftpix[0] + subarr//2) % subarr - subarr//2)
+            col2 = pyfits.Column(name='v', format='I', array=ftpix[1])
+            pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2]))
             hl.append(pyfits.ImageHDU(np.array(ftpix),header))
-            hl.append(pyfits.ImageHDU(fmask))
             hl.append(pyfits.ImageHDU(ptok))
             hl.writeto(rdir + out_file,clobber=True)
 
         return ftpix, fmask, ptok, pmask
     
-    def extract_kerphase(self,ptok_file='',ftpix=([],[]),fmask=[],ptok=[],cube=[],cube_file='',
+    def extract_kerphase(self,fourier_mask_file='', kernel_defn_file='',
+        ftpix=([],[]),fmask=[],ptok=[],cube=[],cube_file='',
         add_noise=0,rnoise=5.0,gain=4.0,out_file='',recompute_ptok=False,
         use_poise=False,systematic=[],cal_kp=[],summary_file='',pas=[0], subarr=None,
-        ptok_out='',window_edges=True, rdir='', cdir='', use_powerspect=True):
-        """Extract the kernel-phases.
+        ptok_out='',window_edges=True, rdir='', cdir='', use_powerspect=True, plotit=True):
+        """Extract the kernel-phases and kernel amplitudes.
     
         Parameters
         ----------
+        fourier_mask_file: string
+            Filename for the Fourier mask, used only for power spectrum bias.
+        kernel_defn_file: string
+            Filename for the kernel phase definition file.
         cube: (Nframes,Nx,Ny) array (dtype=float)
             The cleaned input data
         ftpix: (K array,K array) 
@@ -365,29 +408,43 @@ class PYPOISE():
             rnoise = h['RNOISE']
             gain = h['PGAIN']
             hinfo = self.aoinst.info_from_header(h, subarr=subarr)
-            #If we don't over-write the ptok_file, use the default
-            if len(ptok_file)==0:
-                ptok_file = hinfo['ftpix_file']
+            #If we don't over-write the kernel phase definition file, use the default
+            if len(kernel_defn_file)==0:  
+                kernel_defn_file = hinfo['kernel_defn_file']
+            if len(fourier_mask_file)==0:
+                fourier_mask_file = hinfo['fourier_mask_file']
         if (len(cube.shape) != 3):
             print("Error: cube doesn't have 3 dimensions! specify cube or cube_file")
             raise UserWarning
 
         #Input the kernel-phase extraction parameters. By default, we get this from 
         #a file, unless there are additional inputs.
-        if (len(ptok_file) != 0):
+        if (len(kernel_defn_file) != 0):
             #First... sort out the path. The ptok_file should be in 
             #the cdir if it is specific to a data set (e.g. a POISE file)
             #and should be in the rdir otherwise.
-            if os.path.isfile(cdir + ptok_file):
-                ptok_file_full = cdir + ptok_file
+            if os.path.isfile(cdir + kernel_defn_file):
+                kernel_file_full = cdir + kernel_defn_file
             else:
-                ptok_file_full = rdir + ptok_file
+                kernel_file_full = rdir + kernel_defn_file
+            kernel_header = pyfits.getheader(kernel_file_full)
             if len(ftpix[0]) == 0:
-                ftpix = pyfits.getdata(ptok_file_full,0)
-            if len(fmask) == 0:
-                fmask = pyfits.getdata(ptok_file_full,1)
+                ftpix_uv = pyfits.getdata(kernel_file_full,1)
+                if kernel_header['GRID']:
+                    ftpix = np.empty( (2,len(ftpix_uv['u'])), dtype=int)
+                    subarr = kernel_header['SUBARR']
+                    ftpix[0] = ftpix_uv['u'] % subarr
+                    ftpix[1] = ftpix_uv['v'] % subarr
+                else:
+                    raise UserWarning("Only GRID=True supported!")
             if len(ptok) == 0:
-                ptok = pyfits.getdata(ptok_file_full,2)
+                ptok = pyfits.getdata(kernel_file_full,2)
+                
+        #Assume that the Fourier mask file is in the reference dir (rdir)
+        if (len(fourier_mask_file) != 0):
+            if len(fmask) == 0:
+                fmask = pyfits.getdata(rdir + fourier_mask_file)
+                
         #Now some double-checking that we have all our variables.
         if (len(ptok.shape) != 2):
             print("Error: pupil to kerphase matrix doesn't have 2 dimensions! specify ftpix_file or ptok")
@@ -398,6 +455,7 @@ class PYPOISE():
         if (len(fmask) == 0):
             print("Error: no Fourier zero mask specified! Specify fmask or ptok_file")
             raise UserWarning
+        
         #Extract the POISE variables if needed
         if (use_poise):
             if (len(ptok_file) > 0):
@@ -431,8 +489,9 @@ class PYPOISE():
         if use_powerspect and use_poise:
             ps_comb = np.zeros((nf,nps_comb))
             ps_comb_nonoise = np.zeros((nf_nonoise,nps_comb))
-        plt.clf()
-        plt.axis([0,len(ftpix[0]),-3,3])
+        if plotit:
+            plt.clf()
+            plt.axis([0,len(ftpix[0]),-3,3])
         for i in range(nf):
             if (add_noise > 0):
                 im_raw = cube[i//add_noise,:,:]
@@ -459,9 +518,10 @@ class PYPOISE():
             #... and compute the phases.
             phases = np.angle(ftim[ftpix])
             #Need 3 plots here (phase, kernel-phase and calibrated power spectra)
-            plt.plot(phases,'.')
-            plt.xlabel('Fourier Index')
-            plt.ylabel('Phase (radians) or Calibrated PS')
+            if plotit:
+                plt.plot(phases,'.')
+                plt.xlabel('Fourier Index')
+                plt.ylabel('Phase (radians) or Calibrated PS')
             kp[i,:] = np.dot(ptok,phases)
             #If use_poise is set, then we need to subtract the calibrator kp
             if (use_poise):
@@ -479,11 +539,12 @@ class PYPOISE():
                             ps_comb_nonoise[i//add_noise,:] = ps_comb[i,:]
             if (i % 10 == 9):
                 print("Done file: " + str(i))
-    #            plt.plot(kp[i,:])
-                plt.pause(0.001)
-                #plt.draw()
-                plt.clf()
-                plt.axis([0,len(ftpix[0]),-3,3])
+                if plotit:
+        #            plt.plot(kp[i,:])
+                    plt.pause(0.001)
+                    #plt.draw()
+                    plt.clf()
+                    plt.axis([0,len(ftpix[0]),-3,3])
             
         #Compute statistics, to save to the summary file. If use_poise is set, 
         #then we also need to add the systematic error component.
@@ -504,7 +565,7 @@ class PYPOISE():
             kp_sig = np.sqrt(np.diagonal(kp_cov))
             hl = pyfits.HDUList()
             header = pyfits.Header()
-            header['PTOKFILE'] = ptok_file
+            header['PTOKFILE'] = kernel_defn_file
             header['CUBEFILE'] = cube_file
             header['TARGNAME'] = targname
             if len(out_file) > 0:
@@ -556,7 +617,7 @@ class PYPOISE():
             hl = pyfits.HDUList()
             header = pyfits.Header()
             header['CUBEFILE'] = cube_file
-            header['PTOKFILE'] = ptok_file
+            header['PTOKFILE'] = kernel_defn_file
             hl.append(pyfits.ImageHDU(kp,header))
             hl.append(pyfits.ImageHDU(ps))
             hl.writeto(cdir + out_file,clobber=True)
