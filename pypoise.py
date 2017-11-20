@@ -32,7 +32,7 @@ class PYPOISE():
             Two-dimensional redundancy array, computing how many baselines
             contribute to each Fourier pixel.
         AA: (subarr,subarr,npsi) array
-            A two-dimensional array for each pupil position, showing how phase
+            A two-dimensional array fo          r each pupil position, showing how phase
             at that position contributes to the particular Fourier component phase
             (+1 or -1)
         ftpix: ( (nphi) array, (nphi) array)
