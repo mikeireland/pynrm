@@ -17,21 +17,33 @@ import aplpy
 import opticstools as ot
 plt.ion()
 
+initial_model = {'type':'ptsrc'}
+initial_model = {'type':'gaussian', 'sigma':2}
+
+#The Alex way...
+if (False):
+    if len(sys.argv)<3:
+        print("Useage: rl_deconv.py image_file calibration_star_file")
+        sys.exit()
+    filename = sys.argv[1]
+    cal_file = sys.argv[2]
+    header = pyfits.getheader(filename)
+    radec = [header['RA'],header['DEC']]
+    pa = np.mean(pyfits.getdata(filename,1)['pa'])
+    tgt_ims = pyfits.getdata(filename)
+    cal_ims = pyfits.getdata(cal_file)
+    
+
 #Inputs here...
-"""dir = '/Users/mireland/tel/nirc2/redux/IRS48/'
-filename = dir + 'good_ims.fits'"""
+dir = '/Users/mireland/tel/nirc2/redux/IRS48/'
+filename = dir + 'good_ims.fits'
 pa = 317.4 # From np.mean(pyfits.getdata('cube333.fits',1)['pa'])
-#radec = [246.9049584,-23.49026944]
+radec = [246.9049584,-23.49026944]
+tgt_ims = pyfits.getdata(filename)
+cal_ims = pyfits.getdata(filename,1)
+    
 #radec = [276.124,-29.780]
 #radec = [15*(18 + 24/60. + 29.76/3600.),-29 - 46/60. - 47.7/3600]
-if len(sys.argv)<3:
-    print("Useage: rl_deconv.py image_file calibration_star_file")
-    sys.exit()
-filename = sys.argv[1]
-cal_file = sys.argv[2]
-header = pyfits.getheader(filename)
-radec = [header['RA'],header['DEC']]
-pa = np.mean(pyfits.getdata(filename,1)['pa'])
 
 #dir = '/Users/mireland/tel/nirc2/redux/HD169142/2016/'
 #filename = dir + 'good_ims.fits'
@@ -41,9 +53,7 @@ subtract_median=True
 
 #Should be automatic from here. Things to play with include niter, and the initial
 #model
-niter = 50
-tgt_ims = pyfits.getdata(filename)
-cal_ims = pyfits.getdata(cal_file)
+niter = 20
 sz = tgt_ims.shape[1]
 best_models = np.zeros( tgt_ims.shape )
 best_rms = np.zeros( tgt_ims.shape[0] )
@@ -87,7 +97,17 @@ for i in range(tgt_ims.shape[0]):
         #The initial model just has a "star" at the location of the data maximum
         model = np.zeros(data.shape)
         model += 1.0/data.size
-        model[max_ix_data] = 1.0
+        if initial_model['type']=='ptsrc':
+            model[max_ix_data] = 1.0
+        elif initial_model['type']=='gaussian':
+            ix0 = np.arange(data.shape[0])-max_ix_data[0]
+            ix1 = np.arange(data.shape[1])-max_ix_data[1]
+            ix2d = np.meshgrid(ix0,ix1, indexing='ij')
+            r = np.sqrt(ix2d[0]**2 + ix2d[1]**2)
+            model = np.exp(-r**2/2.0/initial_model['sigma']**2)
+            model /= np.sum(model)
+        else:
+            raise UserWarning("Unsupported model")
         #Do the RL magical algorithm. See 
         for k in range(niter):
             # u (convolved) p is our model of the data. Compute this first.
@@ -106,6 +126,9 @@ for i in range(tgt_ims.shape[0]):
     best_cal = np.argmin(rms)
     best_models[i,:,:] = model_ims[best_cal,:,:]
     best_rms[i] = rms[best_cal]
+    #!!!!
+    plt.imshow(best_models[i])
+    plt.pause(.001)
     
 ptsrc_fluxes = best_models[:,sz//2,sz//2].copy()
 #set the central pixel to zero.

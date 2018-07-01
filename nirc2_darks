@@ -4,10 +4,10 @@
 2) Run, e.g. "sh  /home/nirc2eng/vis/ireland/darks.150623" """
 from __future__ import print_function
 import numpy as np
-import nirc2
+from pynrm import NIRC2
 import sys
 
-n2 = nirc2.NIRC2()
+n2 = NIRC2()
 if len(sys.argv) > 1:
     n2.ddir = sys.argv[1]
 else:

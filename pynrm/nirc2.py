@@ -11,7 +11,7 @@ import glob
 import pdb
 import time
 
-from aoinstrument import AOInstrument 
+from .aoinstrument import AOInstrument 
 
 class NIRC2(AOInstrument):
  """The NIRC2 Class, that enables processing of NIRC2 images.

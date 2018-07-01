@@ -273,6 +273,13 @@ class AOInstrument:
     # Now compute the bad pixel corrections. (NB a sanity check here is
     # that the imaginary part really is 0)
     addit = -np.real(np.dot(np.append(ftimz.real, ftimz.imag),ibadmat))
+    
+    #FIXIT
+    #We would rather use linalg.solve than an inversion!
+    #addit2 = 
+    #import pdb; pdb.set_trace()
+    #    ibadmat = np.solve(
+
 #    plt.clf()
 #    plt.plot(np.real(np.dot(ftimz,ibadmat)), np.imag(np.dot(ftimz,ibadmat)))
 #    raise UserWarning

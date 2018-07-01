@@ -329,7 +329,7 @@ class PYPOISE():
             col1 = pyfits.Column(name='u', format='I', array=(ftpix[0] + subarr//2) % subarr - subarr//2)
             col2 = pyfits.Column(name='v', format='I', array=ftpix[1])
             pyfits.BinTableHDU.from_columns(pyfits.ColDefs([col1,col2]))
-            hl.append(pyfits.ImageHDU(np.array(ftpix),header))
+            hl.append(pyfits.ImageHDU(np.array(ftpix),header)) #!!! FIXME
             hl.append(pyfits.ImageHDU(ptok))
             hl.writeto(rdir + out_file,clobber=True)
 
